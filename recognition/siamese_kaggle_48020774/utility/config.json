@@ -1,0 +1,13 @@
+{
+    "data_dir": "data",
+    "train_split": 0.8,
+    "class_split": 0.2,
+    "max_images": 100,
+    "anchor_count": 10,
+    "image_width": 480,
+    "image_height": 360,
+    "batch_size": 32,
+    "epochs": 10,
+    "learning_rate": 0.001,
+    "model_save_path": "siamese_model.h5"
+}
