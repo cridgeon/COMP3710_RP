@@ -6,9 +6,9 @@ from PIL import Image
 import json
 
 def list_ISIC_images(folder):
-    return sorted([f.split(".")[0] for f in os.listdir(folder) if f.endswith(".jpeg")])
+    return sorted([f.split(".")[0] for f in os.listdir(folder) if f.endswith(".jpg")])
 
-def load_ISIC_tensors(data_dir: str, train_size: int, test_size: int) -> ((tf.Tensor, tf.Tensor), (tf.Tensor, tf.Tensor)):
+def load_ISIC_tensors(data_dir: str, num_images: int, split: float, w: int = 3000, h: int = 2000) -> ((tf.Tensor, tf.Tensor), (tf.Tensor, tf.Tensor)):
     """
     Loads all images from a folder into a single 4-D tenso.
     
@@ -28,39 +28,55 @@ def load_ISIC_tensors(data_dir: str, train_size: int, test_size: int) -> ((tf.Te
     real_image_names  = list_ISIC_images(data_dir + "/images")
     metadata = pd.read_csv(data_dir + "/ISIC_2020_Training_GroundTruth.csv")
     image_names = metadata['image_name'].values
-    image_names = sorted(list(set(real_image_names).intersection(set([name for name in image_names]))))
+    image_names = list(set(real_image_names).intersection(set([name for name in image_names])))
     metadata = metadata[metadata['image_name'].isin(image_names)]
+    np.random.shuffle(image_names)
+
+    X, Y = [], []
 
     TrainX, TrainY, TestX, TestY = [], [], [], []
     i = 0
+    print("Loading data...")
     while True:
-        if (i == train_size) or (i == len(image_names)):
+        if (i == num_images) or (i == len(image_names)):
             break
         name = image_names[i]
+        i += 1
 
-        xb = tf.io.read_file(os.path.join(data_dir, "images/" + name + ".jpeg"))
-        x  = tf.image.decode_png(xb, channels=1)
+        if (i / num_images) * 100 % 10 == 0:
+            print(f"{(i / num_images) * 100:.1f}% done")
+
+        xb = tf.io.read_file(os.path.join(data_dir, "images/" + name + ".jpg"))
+        x  = tf.image.decode_jpeg(xb, channels=1)
         x  = tf.image.resize(x, [w, h], method=tf.image.ResizeMethod.BILINEAR)
         x  = tf.cast(x, tf.float32) / 255.0 - 0.5
 
-        print("BENIGN" if metadata[metadata['image_name'] == name]["target"].values[0] == 0 else "MALIGNANT")
-
         y  = tf.cast(1 if metadata[metadata['image_name'] == name]["target"].values[0] == 1 else 0, tf.float32)
 
-        TrainX.append(x)
-        TrainY.append(y)
-    #     xb = tf.convert_to_tensor(ds.pixel_array, dtype=tf.float32)
-    #     x  = tf.image.decode_png(xb, channels=3)
-    #     x  = tf.cast(x, tf.float32) / 255.0 - 0.5
-
-    #     y  = tf.cast(ds., tf.float32)
+        X.append(x)
+        Y.append(y)
     
-    # X = tf.stack(Xs, 0)
-    # Y = tf.stack(Ys, 0)
-    # return X, Y
+    num_train = int(len(X) * split)
+    data_size = len(X)
+    for i in range(data_size):
+        index = np.random.randint(0, len(X))
+        if i < num_train:
+            TrainX.append(X[index])
+            TrainY.append(Y[index])
+        else:
+            TestX.append(X[index])
+            TestY.append(Y[index])
+        X.pop(index)
+        Y.pop(index)
+    
+    return (tf.stack(TrainX, 0), tf.stack(TrainY, 0)), (tf.stack(TestX, 0), tf.stack(TestY, 0))
 
-if __name__ == "__main__":
-    data_dir = "data"
-    train_size = 100
-    test_size = 20
-    (X_train, Y_train), (X_test, Y_test) = load_ISIC_tensors(data_dir, train_size, test_size)
+# if __name__ == "__main__":
+#     data_dir = "data"
+#     train_size = 3000
+#     (X_train, Y_train), (X_test, Y_test) = load_ISIC_tensors(data_dir, train_size, 0.8, 480, 360)
+#     print("stats: ")
+#     print(X_train.shape, Y_train.shape)
+#     print(X_test.shape, Y_test.shape)
+#     print("# benign: ", tf.reduce_sum(1 - Y_train).numpy(), tf.reduce_sum(1 - Y_test).numpy())
+#     print("# malignant: ", tf.reduce_sum(Y_train).numpy(), tf.reduce_sum(Y_test).numpy())
