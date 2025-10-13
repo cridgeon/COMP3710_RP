@@ -32,8 +32,6 @@ def load_ISIC_tensors() -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, tf.
     class_split = config["class_split"]
     max_images = config["max_images"]
     anchor_count = config["anchor_count"]
-    w = config["image_width"]
-    h = config["image_height"]
     train_split = config["train_split"]
 
     real_image_names  = list_ISIC_images(data_dir + "/images")
@@ -55,14 +53,14 @@ def load_ISIC_tensors() -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, tf.
 
         xb = tf.io.read_file(os.path.join(data_dir, "images/" + positive_names[index1] + ".jpg"))
         x  = tf.image.decode_jpeg(xb, channels=3)
-        x  = tf.image.resize(x, [w, h], method=tf.image.ResizeMethod.BILINEAR)
+        x  = tf.image.resize(x, [256, 256], method=tf.image.ResizeMethod.BILINEAR)
         x  = tf.cast(x, tf.float32) / 255.0 - 0.5
 
         positives.append(x)
 
         xb = tf.io.read_file(os.path.join(data_dir, "images/" + negative_names[index2] + ".jpg"))
         x  = tf.image.decode_jpeg(xb, channels=3)
-        x  = tf.image.resize(x, [w, h], method=tf.image.ResizeMethod.BILINEAR)
+        x  = tf.image.resize(x, [256, 256], method=tf.image.ResizeMethod.BILINEAR)
         x  = tf.cast(x, tf.float32) / 255.0 - 0.5
 
         negatives.append(x)
@@ -110,7 +108,7 @@ def load_ISIC_tensors() -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, tf.
 
         xb = tf.io.read_file(os.path.join(data_dir, "images/" + name + ".jpg"))
         x  = tf.image.decode_jpeg(xb, channels=3)
-        x  = tf.image.resize(x, [w, h], method=tf.image.ResizeMethod.BILINEAR)
+        x  = tf.image.resize(x, [256, 256], method=tf.image.ResizeMethod.BILINEAR)
         x  = tf.cast(x, tf.float32) / 255.0 - 0.5
 
         y  = tf.cast(1 if dataset.iloc[i]['target'] == 1 else 0, tf.float32)
@@ -199,4 +197,4 @@ if __name__ == "__main__":
     print("# benign: ", tf.reduce_sum(1 - Y_train).numpy(), tf.reduce_sum(1 - Y_test).numpy())
     print("# malignant: ", tf.reduce_sum(Y_train).numpy(), tf.reduce_sum(Y_test).numpy())
 
-    # plot_random_test_samples(X_test, Y_test, 20)
+    plot_random_test_samples(X_test, Y_test, 20)

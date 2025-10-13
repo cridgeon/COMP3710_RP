@@ -37,12 +37,43 @@ Below is a list of hyperparameters and their functions
 | `class_split`      | Proportion of positive (malignant) samples in the dataset.   |
 | `max_images   `    | The maximum number of images loaded into mem. To prevent mem errors|
 | `anchor_count`     | The number of images to reserve for use as anchors.    |
-| `image_width`      | Width to resize images to during preprocessing.        |
-| `image_height`     | Height to resize images to during preprocessing.       |
 | `batch_size`       | Number of samples per training batch.                  |
 | `epochs`           | Number of training epochs.                             |
 | `learning_rate`    | Learning rate for the optimizer.                       |
 | `model_save_path`  | File path to save the trained model.                   |
+
+<h3> Model Background </h3>
+
+The Generic architecture of a Siamese Network features two identical subnetworks 
+(twin networks) that share the same weights and parameters. Intended problem that
+a Siamese Network solves is to determine whether two input samples are similar or 
+different, classic examples being signature and face recognition. In this report
+a Siamese Network is used to compare images of skin lesions with known malignant 
+and benign melanoma samples, with the goal of classifying the unknown sample.
+
+<h3> Model Architecture </h3>
+
+The architecture used for the twin networks is a ResNet50 Convolutional Neural
+Network. Which is proven be effective at extraction of key image features, while
+maintaining relative minimality. The ResNet50 architecture features 49 
+convolutional layers and a maxpooling layer. It is comprised of multiple blocks
+that are that have a "bottleneck" design.
+
+The bottleneck design is conprised of three convolutional layers. The first layer
+is a 1x1 convolutional layer that reduces the number of channels, designed to
+reduce dimensionality while maintaining key features. The second layer is a 3x3
+convolutional layer with a stride of 2, used to extract spatial features. The 
+final layer is another 1x1 convolutional layer that returns the dimensionality
+to the original number of channels. 
+
+![ResNet Bottleneck Block](resources/bottleneck.webp)
+
+The full ResNet50 architecture employs 4 permutations of the bottleneck block,
+arranged as shown below.
+
+![ResNet50 Architecture](resources/resnet50.webp)
+
+A more in depth explanation of the ResNet50 architecture can be found [here](https://blog.roboflow.com/what-is-resnet-50/).
 
 <h2> Using the model </h2>
 
