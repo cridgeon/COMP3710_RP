@@ -95,6 +95,14 @@ the positive image is greater than (or equal to) the distance to the negative.
 
 <h3> Loss Function </h3>
 
+The loss function used to evaluate the accuracy of the model is triplet loss.
+>Triplet loss is a loss function where we compare a baseline (anchor) input to a positive (truthy) input and a negative (falsy) input. The distance from the baseline (anchor) input to the positive (truthy) input is minimized, and the distance from the baseline (anchor) input to the negative (falsy) input is maximized. [[1]](https://builtin.com/machine-learning/siamese-network)
+![triplet loss equation](./resources/triplet.webp)
+
+The 'positive' input referred to should have the same classification as the anchor
+image, while the negative one should not.
+
+<h3> Training Process </h3>
 
 <h2> Using the model </h2>
 
