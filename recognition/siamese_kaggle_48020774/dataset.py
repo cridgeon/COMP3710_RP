@@ -31,7 +31,7 @@ def load_ISIC_tensors() -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, tf.
     data_dir = config["data_dir"]
     class_split = config["class_split"]
     max_images = config["max_images"]
-    anchor_count = config["anchor_count"]
+    pn_sample_count = config["pn_sample_count"]
     train_split = config["train_split"]
 
     real_image_names  = list_ISIC_images(data_dir + "/images")
@@ -47,7 +47,7 @@ def load_ISIC_tensors() -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor, tf.
 
     positives, negatives = [], []
 
-    for i in range(anchor_count):
+    for i in range(pn_sample_count):
         index1 = np.random.randint(0, len(positive_names))
         index2 = np.random.randint(0, len(negative_names))
 

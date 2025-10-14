@@ -36,7 +36,7 @@ Below is a list of hyperparameters and their functions
 | `train_split`      | Fraction of data used for training (rest for validation/testing).  |
 | `class_split`      | Proportion of positive (malignant) samples in the dataset.   |
 | `max_images   `    | The maximum number of images loaded into mem. To prevent mem errors|
-| `anchor_count`     | The number of images to reserve for use as anchors.    |
+| `pn_sample_count`     | The number of images to reserve for use as samples to compare anchor image to.    |
 | `batch_size`       | Number of samples per training batch.                  |
 | `epochs`           | Number of training epochs.                             |
 | `learning_rate`    | Learning rate for the optimizer.                       |
@@ -74,6 +74,27 @@ arranged as shown below.
 ![ResNet50 Architecture](resources/resnet50.webp)
 
 A more in depth explanation of the ResNet50 architecture can be found [here](https://blog.roboflow.com/what-is-resnet-50/).
+
+Following the ResNet50 is an encoder head, which is a dense net that reduces the
+output of the resnet, over a number of layers to a 256 dimensional vector. This 
+vector represents the models encoding of an image into a kind of latent space.
+This classifier, the resnet followed by encoder, is what is used as the twin 
+network.
+
+In making this a Siamese network, three of the classifiers are run at the same 
+time, on an anchor image, known positive image and known negative image. Then,
+a "distance" can be calculated between the latent encodings of the images. If
+the distance to the positive image is smaller than the distance to the negative
+image, the anchor image can be considered classified as positive and vice versa.
+
+To account for this, after the triplet networks, a custom distance layer is added
+that outputs the distances to from the anchor encoding to the others. Followed by
+a loss layer, that calculates the Triplet loss, explained next, for the optimiser
+to use. Finally, a display layer is added, which outputs a 1 if the distance to 
+the positive image is greater than (or equal to) the distance to the negative.
+
+<h3> Loss Function </h3>
+
 
 <h2> Using the model </h2>
 
