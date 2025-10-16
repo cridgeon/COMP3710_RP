@@ -10,6 +10,52 @@ import json
 def list_ISIC_images(folder):
     return sorted([f.split(".")[0] for f in os.listdir(folder) if f.endswith(".jpg")])
 
+def load_image_(name):
+    xb = tf.io.read_file(os.path.join("recognition/siamese_kaggle_48020774/data/images/" + name + ".jpg"))
+    x  = tf.image.decode_jpeg(xb, channels=3)
+    x  = tf.image.resize(x, [256, 256], method=tf.image.ResizeMethod.BILINEAR)
+    # x  = tf.cast(x, tf.float32) / 255.0 - 0.5
+
+    return x
+
+def load_tensors_(img_meta, pos_meta, neg_meta, images, labels, positives, negatives):
+    for i in range(img_meta.shape[0]):
+        name = img_meta.iloc[i]['image_name']
+
+        x = load_image_(name)
+        images.append(x)
+        labels.append(pos_meta.iloc[i]['target'])
+    for i in range(pos_meta.shape[0]):
+        name = pos_meta.iloc[i]['image_name']
+
+        x = load_image_(name)
+        positives.append(x)
+    for i in range(neg_meta.shape[0]):
+        name = neg_meta.iloc[i]['image_name']
+
+        x = load_image_(name)
+        negatives.append(x)
+
+def GenerateSet_(num, pos_meta, neg_meta, class_split):
+    X, Y, P, N = [], [], [], []
+
+    n_pos = class_split * num
+    n_neg = (1 - class_split) * num
+    num = int(n_pos) + int(n_neg)
+
+    im = pos_meta.sample(n=int(n_pos)).merge(neg_meta.sample(n=int(n_neg)))
+    pm = pos_meta.sample(n=num)
+    nm = neg_meta.sample(n=num)
+
+    load_tensors_(im, pm, nm, X, Y, P, N)
+
+    X = tf.stack(X, 0)
+    Y = tf.convert_to_tensor(Y, dtype=tf.float32)
+    P = tf.stack(P, 0)
+    N = tf.stack(N, 0)
+
+    return X,Y,P,N
+
 class PreprocessLayer(layers.Layer):
     """
     This layer is responsible for preprocessing the input images
@@ -19,36 +65,28 @@ class PreprocessLayer(layers.Layer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.flip = layers.RandomFlip("horizontal_and_vertical")
+        self.hue = layers.RandomHue(0.2)
+        self.contrast = layers.RandomContrast(0.2)
+        self.brightness = layers.RandomBrightness(0.2)
+        self.invert = layers.RandomInvert(0.2)
 
     def call(self, inputs):
-        inputs = self.flip(inputs)
+        # inputs = self.flip(inputs)
+        # inputs = self.hue(inputs)
+        # inputs = self.contrast(inputs)
+        # inputs = self.brightness(inputs)
+        # inputs = self.invert(inputs)
         return inputs
 
 class Dataset:
-    def __init__(self, data_dir: str, class_split: float, train_size: int, test_size: int, validate_size: int = 0):
+    def __init__(self, data_dir: str, class_split: float, train_split: int):
         if (class_split <= 0.02 or class_split >= 1):
             raise ValueError("class_split must be between 0.02 and 1")
 
         self.data_dir = data_dir
         self.class_split = class_split
-        self.train_size = train_size
-        self.test_size = test_size
-        self.validate_size = validate_size
-
-        self.train_images = []
-        self.train_labels = []
-        self.train_positives = []
-        self.train_negatives = []
-
-        self.test_images = []
-        self.test_labels = []
-        self.test_positives = []
-        self.test_negatives = []
-
-        self.validate_images = []
-        self.validate_labels = []
-        self.validate_positives = []
-        self.validate_negatives = []
+        self.train_split = train_split
+        
         """
         Loads all images from a folder into a single 4-D tenso.
         
@@ -73,151 +111,120 @@ class Dataset:
         # only image that exist in both the metadata and the images folder
         image_names = list(set(real_image_names).intersection(set([name for name in image_names])))
         metadata = metadata[metadata['image_name'].isin(image_names)]
-        positives = metadata[metadata['target'] == 1].sample(frac=1)
-        negatives = metadata[metadata['target'] == 0].sample(frac=1)
+        self.train_pm = metadata[metadata['target'] == 1].sample(frac=1)
+        self.train_nm = metadata[metadata['target'] == 0].sample(frac=1)
+        self.test_pm = self.train_pm.sample(frac=self.train_split)
+        self.test_nm = self.train_nm.sample(frac=self.train_split)
+        self.train_pm = self.train_pm.drop(self.test_pm.index)
+        self.train_nm = self.train_nm.drop(self.test_nm.index)
 
+
+# ----------------------------------------
         # select the dataset
-        n_malignant = positives.shape[0]
-        real_class_split = n_malignant / metadata.shape[0]
-        dataset = pd.DataFrame()
-        total_images = ((1 / class_split) * n_malignant) // 1 + 1
-        negatives = negatives.sample(n=int(total_images - n_malignant))
-        desired_images = self.train_size + self.test_size + self.validate_size
+        # n_malignant = positives.shape[0]
+        # real_class_split = n_malignant / metadata.shape[0]
+        # dataset = pd.DataFrame()
+        # total_images = ((1 / class_split) * n_malignant) // 1 + 1
+        # negatives = negatives.sample(n=int(total_images - n_malignant))
+        # desired_images = self.train_size + self.test_size + self.validate_size
 
-        if desired_images > total_images:
-            ratio =  total_images / desired_images
-            print("Total # of desired images is greater than # of images on disk! unable to load all requested data.")
-            train_size = (train_size * ratio) // 1
-            test_size = (test_size * ratio) // 1
-            validate_size = (validate_size * ratio) // 1
-            print("New image split:")
-            print("  Train size   : ", train_size)
-            print("  Test size    : ", test_size)
-            print("  Validate size: ", validate_size)
+        # if desired_images > total_images:
+        #     ratio =  total_images / desired_images
+        #     print("Total # of desired images is greater than # of images on disk! unable to load all requested data.")
+        #     train_size = (train_size * ratio) // 1
+        #     test_size = (test_size * ratio) // 1
+        #     validate_size = (validate_size * ratio) // 1
+        #     print("New image split:")
+        #     print("  Train size   : ", train_size)
+        #     print("  Test size    : ", test_size)
+        #     print("  Validate size: ", validate_size)
 
-        train_positives_metadata = positives.sample(n=int(self.train_size * self.class_split))
-        train_negatives_metadata = negatives.sample(n=int(self.train_size * (1 - self.class_split)))
-        positives = positives.drop(train_positives_metadata.index)
-        negatives = negatives.drop(train_negatives_metadata.index)
-        test_positives_metadata = positives.sample(n=int(self.test_size * self.class_split))
-        test_negatives_metadata = negatives.sample(n=int(self.test_size * (1 - self.class_split)))
-        positives = positives.drop(test_positives_metadata.index)
-        negatives = negatives.drop(test_negatives_metadata.index)
-        validate_positives_metadata = positives.sample(n=int(self.validate_size * self.class_split))
-        validate_negatives_metadata = negatives.sample(n=int(self.validate_size * (1 - self.class_split)))
+        # train_positives_metadata = positives.sample(n=int(self.train_size * self.class_split))
+        # train_negatives_metadata = negatives.sample(n=int(self.train_size * (1 - self.class_split)))
+        # positives = positives.drop(train_positives_metadata.index)
+        # negatives = negatives.drop(train_negatives_metadata.index)
+        # test_positives_metadata = positives.sample(n=int(self.test_size * self.class_split))
+        # test_negatives_metadata = negatives.sample(n=int(self.test_size * (1 - self.class_split)))
+        # positives = positives.drop(test_positives_metadata.index)
+        # negatives = negatives.drop(test_negatives_metadata.index)
+        # validate_positives_metadata = positives.sample(n=int(self.validate_size * self.class_split))
+        # validate_negatives_metadata = negatives.sample(n=int(self.validate_size * (1 - self.class_split)))
 
-        def load_image(name):
-            xb = tf.io.read_file(os.path.join(data_dir, "images/" + name + ".jpg"))
-            x  = tf.image.decode_jpeg(xb, channels=3)
-            x  = tf.image.resize(x, [256, 256], method=tf.image.ResizeMethod.BILINEAR)
-            x  = tf.cast(x, tf.float32) / 255.0 - 0.5
+        # def load_image(name):
+        #     xb = tf.io.read_file(os.path.join(data_dir, "images/" + name + ".jpg"))
+        #     x  = tf.image.decode_jpeg(xb, channels=3)
+        #     x  = tf.image.resize(x, [256, 256], method=tf.image.ResizeMethod.BILINEAR)
+        #     # x  = tf.cast(x, tf.float32) / 255.0 - 0.5
 
-            return x
+        #     return x
 
-        def load_tensors(pos_meta, neg_meta, images, labels, positives, negatives):
-            for i in range(pos_meta.shape[0]):
-                name = pos_meta.iloc[i]['image_name']
+        # def load_tensors(pos_meta, neg_meta, images, labels, positives, negatives):
+        #     for i in range(pos_meta.shape[0]):
+        #         name = pos_meta.iloc[i]['image_name']
 
-                x = load_image(name)
-                images.append(x)
-                positives.append(x)
-                labels.append(pos_meta.iloc[i]['target'])
-            for i in range(neg_meta.shape[0]):
-                name = neg_meta.iloc[i]['image_name']
+        #         x = load_image(name)
+        #         images.append(x)
+        #         positives.append(x)
+        #         labels.append(pos_meta.iloc[i]['target'])
+        #     for i in range(neg_meta.shape[0]):
+        #         name = neg_meta.iloc[i]['image_name']
 
-                x = load_image(name)
-                images.append(x)
-                negatives.append(x)
-                labels.append(neg_meta.iloc[i]['target'])
+        #         x = load_image(name)
+        #         images.append(x)
+        #         negatives.append(x)
+        #         labels.append(neg_meta.iloc[i]['target'])
 
-            images = tf.stack(images, 0)
-            positives = tf.stack(positives, 0)
-            negatives = tf.stack(negatives, 0)
+        #     images = tf.stack(images, 0)
+        #     positives = tf.stack(positives, 0)
+        #     negatives = tf.stack(negatives, 0)
 
-        print("Loading test images...")
-        load_tensors(test_positives_metadata, test_negatives_metadata, self.test_images, self.test_labels, self.test_positives, self.test_negatives)
-        print("Loading train images...")
-        load_tensors(train_positives_metadata, train_negatives_metadata, self.train_images, self.train_labels, self.train_positives, self.train_negatives)
-        print("Loading validate images...")
-        load_tensors(validate_positives_metadata, validate_negatives_metadata, self.validate_images, self.validate_labels, self.validate_positives, self.validate_negatives)
+        # print("Loading test images...")
+        # load_tensors(test_positives_metadata, test_negatives_metadata, self.test_images, self.test_labels, self.test_positives, self.test_negatives)
+        # print("Loading train images...")
+        # load_tensors(train_positives_metadata, train_negatives_metadata, self.train_images, self.train_labels, self.train_positives, self.train_negatives)
+        # print("Loading validate images...")
+        # load_tensors(validate_positives_metadata, validate_negatives_metadata, self.validate_images, self.validate_labels, self.validate_positives, self.validate_negatives)
 
-        total_pos = \
-            len(self.train_positives) + \
-            len(self.test_positives) + \
-            len(self.validate_positives)
-        total_neg = \
-            len(self.train_negatives) + \
-            len(self.test_negatives) + \
-            len(self.validate_negatives)
-        print(f"Using {train_size + test_size + validate_size} images with {total_pos} malignant and {total_neg} benign")
+        # total_pos = \
+        #     len(self.train_positives) + \
+        #     len(self.test_positives) + \
+        #     len(self.validate_positives)
+        # total_neg = \
+        #     len(self.train_negatives) + \
+        #     len(self.test_negatives) + \
+        #     len(self.validate_negatives)
+        # print(f"Using {train_size + test_size + validate_size} images with {total_pos} malignant and {total_neg} benign")
 
         # Average all chosen tensors and normalize them
-        def normalize_tensor(tensor, mean, std):
-            return (tensor - mean) / (std + 1e-7)
+        # def normalize_tensor(tensor, mean, std):
+        #     return (tensor - mean) / (std + 1e-7)
 
 
-        # Compute the mean tensor of all images (train + test + anchors)
-        all_images = tf.concat([self.train_images, self.test_images, self.validate_images], axis=0)
-        mean_image = tf.reduce_mean(all_images, axis=0)
-        std_image = tf.math.reduce_std(all_images, axis=0)
+        # # Compute the mean tensor of all images (train + test + anchors)
+        # all_images = tf.concat([self.train_images, self.test_images, self.validate_images], axis=0)
+        # mean_image = tf.reduce_mean(all_images, axis=0)
+        # std_image = tf.math.reduce_std(all_images, axis=0)
 
-        # Subtract mean and normalize each set
-        self.train_images = normalize_tensor(self.train_images, mean_image, std_image)
-        self.train_positives = normalize_tensor(self.train_positives, mean_image, std_image)
-        self.train_negatives = normalize_tensor(self.train_negatives, mean_image, std_image)
-        self.test_images = normalize_tensor(self.test_images, mean_image, std_image)
-        self.test_positives = normalize_tensor(self.test_positives, mean_image, std_image)
-        self.test_negatives = normalize_tensor(self.test_negatives, mean_image, std_image)
-        self.validate_images = normalize_tensor(self.validate_images, mean_image, std_image)
-        self.validate_positives = normalize_tensor(self.validate_positives, mean_image, std_image)
-        self.validate_negatives = normalize_tensor(self.validate_negatives, mean_image, std_image)
+        # # Subtract mean and normalize each set
+        # self.train_images = normalize_tensor(self.train_images, mean_image, std_image)
+        # self.train_positives = normalize_tensor(self.train_positives, mean_image, std_image)
+        # self.train_negatives = normalize_tensor(self.train_negatives, mean_image, std_image)
+        # self.test_images = normalize_tensor(self.test_images, mean_image, std_image)
+        # self.test_positives = normalize_tensor(self.test_positives, mean_image, std_image)
+        # self.test_negatives = normalize_tensor(self.test_negatives, mean_image, std_image)
+        # self.validate_images = normalize_tensor(self.validate_images, mean_image, std_image)
+        # self.validate_positives = normalize_tensor(self.validate_positives, mean_image, std_image)
+        # self.validate_negatives = normalize_tensor(self.validate_negatives, mean_image, std_image)
         print("Dataset initialized.")
 
-    def GenerateSet_(num, images, labels, positives, negatives):
-        X, Y, P, N = None, None, None, None
-
-        for i in range(num):
-            index = np.random.randint(0, len(images))
-            indexp = np.random.randint(0, len(positives))
-            indexn = np.random.randint(0, len(negatives))
-
-            anchor = PreprocessLayer()(images[index])
-            malignant = labels[index]
-            if malignant:
-                pos = PreprocessLayer()(positives[indexp])
-                neg = PreprocessLayer()(negatives[indexn])
-            else:
-                pos = PreprocessLayer()(negatives[indexn])
-                neg = PreprocessLayer()(positives[indexp])
-
-            anchor = tf.reshape(anchor, (-1, 256, 256, 3))
-            pos = tf.reshape(pos, (-1, 256, 256, 3))
-            neg = tf.reshape(neg, (-1, 256, 256, 3))
-
-            if (X == None):
-                X = anchor
-                Y = tf.convert_to_tensor([malignant], dtype=tf.float32)
-                P = pos-1
-                N = neg
-                X = tf.reshape(X, (-1, 256, 256, 3))
-                Y = tf.reshape(Y, (-1, 1))
-                P = tf.reshape(P, (-1, 256, 256, 3))
-                N = tf.reshape(N, (-1, 256, 256, 3))
-            else:
-                X = tf.concat([X, anchor], 0)
-                Y = tf.concat([Y, tf.reshape(tf.convert_to_tensor([malignant], dtype=tf.float32), (-1, 1))], 0)
-                P = tf.concat([P, pos], 0)
-                N = tf.concat([N, neg], 0)
-        return X,Y,P,N
-
     def GenerateTestSet(self, num):
-        return Dataset.GenerateSet_(num, self.test_images, self.test_labels, self.test_positives, self.test_negatives)
+        return GenerateSet_(num, self.test_pm, self.test_nm, self.class_split)
 
     def GenerateTrainSet(self, num):
-        return Dataset.GenerateSet_(num, self.train_images, self.train_labels, self.train_positives, self.train_negatives)
+        return GenerateSet_(num, self.train_pm, self.train_nm, self.class_split)
 
-    def GenerateValidateSet(self, num):
-        return Dataset.GenerateSet_(num, self.validate_images, self.validate_labels, self.validate_positives, self.validate_negatives)
+    # def GenerateValidateSet(self, num):
+    #     return Dataset.GenerateSet_(num, self.validate_pm, self.validate_nm, self.class_split)
 
 import matplotlib.pyplot as plt
 
@@ -244,14 +251,14 @@ def plot_random_pn_samples(Pos, Neg, n):
     for i in range(n):
         plt.subplot(2, n, i + 1)
         img = pos_images[i]
-        img = tf.abs(img)
+        img = tf.abs(img) / 255.0
         plt.imshow(img)
         plt.axis('off')
         plt.title("Malignant")
 
         plt.subplot(2, n, n + i + 1)
         img = neg_images[i]
-        img = tf.abs(img)
+        img = tf.abs(img) / 255.0
         plt.imshow(img)
         plt.axis('off')
         plt.title("Benign")
@@ -279,7 +286,7 @@ def plot_random_test_samples(images, num_samples=8):
     for i in range(num_samples):
         plt.subplot(1, num_samples, i + 1)
         img = images[i]
-        img = tf.abs(img)
+        img = tf.abs(img) / 255.0
         plt.imshow(img)
         plt.axis('off')
     plt.tight_layout()
@@ -289,11 +296,9 @@ if __name__ == "__main__":
     config = json.load(open('recognition/siamese_kaggle_48020774/utility/config.json'))
 
     dataset = Dataset(
-        config["data_dir"], 
+        config["data_dir"],
         config["class_split"],
-        config["train_size"],
-        config["test_size"],
-        config["validate_size"]    
+        config["train_split"] 
     )
 
     X, Y, P, N = dataset.GenerateTestSet(50)

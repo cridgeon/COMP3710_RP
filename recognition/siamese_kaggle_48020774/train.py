@@ -44,7 +44,7 @@ def train(model, train_data, test_data):
     plt.plot(history.history['triplet_loss'], label='triplet loss')
     plt.xlabel('Epoch')
     plt.ylabel('Triplet Loss')
-
+    plt.yscale('log')
     min = tf.reduce_min(history.history['triplet_loss'])
     max = tf.reduce_max(history.history['triplet_loss'])
     plt.ylim([min, max])

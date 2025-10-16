@@ -17,6 +17,6 @@ if __name__ == "__main__":
 
     train.train(
         model,
-        data.GenerateTrainSet(100),
-        data.GenerateTestSet(50)
+        data.GenerateTrainSet(200),
+        data.GenerateTestSet(100)
     )
