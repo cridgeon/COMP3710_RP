@@ -33,10 +33,10 @@ Below is a list of hyperparameters and their functions
 | Name | Function |
 | ---- | -------- |
 | `data_dir`         | Directory where the dataset is stored relative to working directory|
-| `train_split`      | Fraction of data used for training (rest for validation/testing).  |
+| `train_size`       | the number of images to use in the training dataset          |
+| `test_size`        | the number of images to use in the testing dataset           |
+| `validate_size`    | the number of images to use in the validation dataset        |
 | `class_split`      | Proportion of positive (malignant) samples in the dataset.   |
-| `max_images   `    | The maximum number of images loaded into mem. To prevent mem errors|
-| `pn_sample_count`     | The number of images to reserve for use as samples to compare anchor image to.    |
 | `batch_size`       | Number of samples per training batch.                  |
 | `epochs`           | Number of training epochs.                             |
 | `learning_rate`    | Learning rate for the optimizer.                       |

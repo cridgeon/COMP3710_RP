@@ -1,11 +1,11 @@
 {
-    "data_dir": "data",
-    "train_split": 0.8,
+    "data_dir": "recognition/siamese_kaggle_48020774/data",
+    "train_size": 50,
+    "test_size": 50,
+    "validate_size": 20,
     "class_split": 0.2,
-    "max_images": 100,
-    "pn_sample_count": 10,
     "batch_size": 32,
     "epochs": 10,
     "learning_rate": 0.001,
-    "model_save_path": "siamese_model.h5"
+    "model_save_path": "recognition/siamese_kaggle_48020774/siamese_model.weights.h5"
 }

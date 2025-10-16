@@ -22,10 +22,18 @@ class DistanceLayer(layers.Layer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    def call(self, anchor, positive, negative):
+    def call(self, anchor, label, positive, negative):
         ap_distance = ops.sum(tf.square(anchor - positive), -1)
         an_distance = ops.sum(tf.square(anchor - negative), -1)
-        return (ap_distance, an_distance)
+
+        pos_dist = (ap_distance * label) + (an_distance * (1 - label))
+        neg_dist = (an_distance * label) + (ap_distance * (1 - label))
+
+        return (pos_dist, neg_dist)
+    
+    def compute_output_shape(self, input_shape):
+        # input_shape is a list/tuple of 4 shapes: [anchor, label, positive, negative]
+        return (None,), (None,)
     
 class TripletLoss(layers.Layer):
     """
@@ -33,21 +41,21 @@ class TripletLoss(layers.Layer):
     by the optimiser
     """
 
-    def __init__(self, alpha=0.5, name="vae_loss", **kwargs):
+    def __init__(self, alpha=0.5, name="triplet_loss", **kwargs):
         super().__init__(name=name, **kwargs)
         self.loss = metrics.Mean(name="triplet_loss")
         self.alpha = alpha
 
     def call(self, inputs):
-        # inputs: [y_true, y_pred, mu, logvar]
         ap_distance, an_distance = inputs
 
         # compute triplet loss
 
-        loss = ops.maximum(ap_distance - an_distance + self.alpha, 0.0)
+        loss = ops.mean(ops.maximum(ap_distance - an_distance + self.alpha, 0.0))
 
         # update trackers (means over batch)
         self.loss.update_state(loss)
+        self.add_loss(loss)
 
         # pass distances through unchanged
         return inputs
@@ -58,7 +66,6 @@ class TripletLoss(layers.Layer):
         return [self.loss]
     
     def compute_output_shape(self, input_shape):
-        # input_shape is a list/tuple of 4 shapes: [y_true, y_pred, mu, logvar]
         return input_shape
 
 class DisplayLayer(layers.Layer):
@@ -74,11 +81,11 @@ class DisplayLayer(layers.Layer):
     def call(self, distances):
         ap_distance, an_distance = distances
         diff = ap_distance - an_distance
-        ret = tf.convert_to_tensor(1 if diff >= 0 else 0, tf.int8)
+        ret = ((diff / tf.abs(diff)) + 1) / 2
         return ret
     
     def compute_output_shape(self, *args, **kwargs):
-        return (1,)
+        return (None,)
 
 class EncoderHead(layers.Layer):
     """
@@ -112,6 +119,7 @@ class EncoderHead(layers.Layer):
             )
         )
 
+
 def construct_classifier():
     base_cnn = tf.keras.applications.ResNet50(
         include_top=False, 
@@ -128,29 +136,30 @@ def construct_classifier():
     # positive and negative image
 
     input_anchor = layers.Input(name='input_anchor', shape=INPUT_SHAPE)
+    input_label = layers.Input(name='input_label', shape=(1,))
     input_positive = layers.Input(name='input_positive', shape=INPUT_SHAPE)
     input_negative = layers.Input(name='input_negative', shape=INPUT_SHAPE)
 
     output_distances = DistanceLayer()(
         classifier(input_anchor),
+        input_label,
         classifier(input_positive),
         classifier(input_negative)
     )
     loss_layer = TripletLoss(alpha=0.5, name='triplet_loss')(output_distances)
-    output_display = DisplayLayer(name='output_display')(loss_layer)
+    # output_display = DisplayLayer(name='output_display')(loss_layer)
 
     model = models.Model(
-        inputs=[input_anchor, input_positive, input_negative],
-        outputs=output_display
+        inputs=[input_anchor, input_label, input_positive, input_negative],
+        outputs=loss_layer
     )
 
-    classifier.summary()
+    # classifier.summary()
     model.summary()
     return model
 
 def compile_model(model, learning_rate):
-    model.compile(optimizer=optimizers.Adam(learning_rate=learning_rate),
-                  metrics=['triplet_loss'])
+    model.compile(optimizer=optimizers.Adam(learning_rate=learning_rate))
 
 if __name__ == "__main__":
     model = construct_classifier()
