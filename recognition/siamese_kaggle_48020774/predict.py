@@ -6,7 +6,8 @@ if __name__ == "__main__":
 
     data = dataset.Dataset(
         config['data_dir'],
-        config["class_split"],
+        config["max_images_in_ds"],
+        config['class_split'],
         config['train_split']
     )
 
@@ -17,13 +18,11 @@ if __name__ == "__main__":
 
     # train.validate(
     #     model,
-    #     data.GenerateTestSet(100)
+    #     data.GenerateTestSet(500)
     # )
 
-    train_set = data.GenerateTrainSet(200)
-    test_set = data.GenerateTestSet(100)
     train.train(
         model,
-        train_set,
-        test_set
+        data,
+        1
     )

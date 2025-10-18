@@ -26,8 +26,16 @@ class DistanceLayer(layers.Layer):
         ap_distance = ops.sum(tf.square(anchor - positive), -1)
         an_distance = ops.sum(tf.square(anchor - negative), -1)
 
-        pos_dist = (ap_distance * label) + (an_distance * (1 - label))
-        neg_dist = (an_distance * label) + (ap_distance * (1 - label))
+        ap_distance = tf.reshape(ap_distance, (-1, 1))
+        an_distance = tf.reshape(an_distance, (-1, 1))
+
+        i = ap_distance * label
+        j = an_distance * (1 - label)
+        k = an_distance * label
+        l = ap_distance * (1 - label)
+
+        pos_dist = i + l
+        neg_dist = j + k
 
         return (pos_dist, neg_dist)
     
@@ -81,7 +89,7 @@ class DisplayLayer(layers.Layer):
     def call(self, distances):
         ap_distance, an_distance = distances
         diff = ap_distance - an_distance
-        return tf.greater(diff, 0)
+        return tf.greater(diff, tf.zeros_like(diff))
     
     def compute_output_shape(self, *args, **kwargs):
         return (None,)
