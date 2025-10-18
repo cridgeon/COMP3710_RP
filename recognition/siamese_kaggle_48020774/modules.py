@@ -81,8 +81,7 @@ class DisplayLayer(layers.Layer):
     def call(self, distances):
         ap_distance, an_distance = distances
         diff = ap_distance - an_distance
-        ret = ((diff / tf.abs(diff)) + 1) / 2
-        return ret
+        return tf.greater(diff, 0)
     
     def compute_output_shape(self, *args, **kwargs):
         return (None,)
@@ -147,11 +146,11 @@ def construct_classifier():
         classifier(input_negative)
     )
     loss_layer = TripletLoss(alpha=0.5, name='triplet_loss')(output_distances)
-    # output_display = DisplayLayer(name='output_display')(loss_layer)
+    output_display = DisplayLayer(name='output_display')(loss_layer)
 
     model = models.Model(
         inputs=[input_anchor, input_label, input_positive, input_negative],
-        outputs=loss_layer
+        outputs=output_display
     )
 
     # classifier.summary()

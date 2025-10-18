@@ -23,27 +23,30 @@ def load_tensors_(img_meta, pos_meta, neg_meta, images, labels, positives, negat
         name = img_meta.iloc[i]['image_name']
 
         x = load_image_(name)
+        x = PreprocessLayer()(tf.expand_dims(x, 0))[0]
         images.append(x)
         labels.append(pos_meta.iloc[i]['target'])
     for i in range(pos_meta.shape[0]):
         name = pos_meta.iloc[i]['image_name']
 
         x = load_image_(name)
+        x = PreprocessLayer()(tf.expand_dims(x, 0))[0]
         positives.append(x)
     for i in range(neg_meta.shape[0]):
         name = neg_meta.iloc[i]['image_name']
 
         x = load_image_(name)
+        x = PreprocessLayer()(tf.expand_dims(x, 0))[0]
         negatives.append(x)
 
-def GenerateSet_(num, pos_meta, neg_meta, class_split):
+def GenerateSet_(num, pos_meta: pd.DataFrame, neg_meta: pd.DataFrame, class_split: float):
     X, Y, P, N = [], [], [], []
 
     n_pos = class_split * num
     n_neg = (1 - class_split) * num
     num = int(n_pos) + int(n_neg)
 
-    im = pos_meta.sample(n=int(n_pos)).merge(neg_meta.sample(n=int(n_neg)))
+    im = pd.concat([pos_meta.sample(n=int(n_pos)), neg_meta.sample(n=int(n_neg))]).sample(frac=1).reset_index(drop=True)
     pm = pos_meta.sample(n=num)
     nm = neg_meta.sample(n=num)
 
@@ -71,11 +74,11 @@ class PreprocessLayer(layers.Layer):
         self.invert = layers.RandomInvert(0.2)
 
     def call(self, inputs):
-        # inputs = self.flip(inputs)
-        # inputs = self.hue(inputs)
-        # inputs = self.contrast(inputs)
-        # inputs = self.brightness(inputs)
-        # inputs = self.invert(inputs)
+        inputs = self.flip(inputs)
+        inputs = self.hue(inputs)
+        inputs = self.contrast(inputs)
+        inputs = self.brightness(inputs)
+        inputs = self.invert(inputs)
         return inputs
 
 class Dataset:
@@ -266,7 +269,7 @@ def plot_random_pn_samples(Pos, Neg, n):
     plt.show()
 
 
-def plot_random_test_samples(images, num_samples=8):
+def plot_outputs(images, labels, outputs):
     """
     Plots a random sample of test images with their labels.
 
@@ -279,14 +282,15 @@ def plot_random_test_samples(images, num_samples=8):
     num_samples : int
         Number of samples to plot.
     """
-    idxs = np.random.choice(images.shape[0], num_samples, replace=False)
-    images = images.numpy()[idxs]
+    n = len(images)
+    l = int(np.sqrt(n))
 
     plt.figure(figsize=(16, 2))
-    for i in range(num_samples):
-        plt.subplot(1, num_samples, i + 1)
+    for i in range(n):
+        plt.subplot(l, l + 1, i + 1)
         img = images[i]
         img = tf.abs(img) / 255.0
+        plt.title(f"Label: {labels[i]}\nOutput: {1 if outputs[0][i] else 0}")
         plt.imshow(img)
         plt.axis('off')
     plt.tight_layout()

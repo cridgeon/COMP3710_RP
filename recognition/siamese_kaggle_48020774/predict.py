@@ -7,16 +7,23 @@ if __name__ == "__main__":
     data = dataset.Dataset(
         config['data_dir'],
         config["class_split"],
-        config['train_size'],
-        config['test_size'],
-        config['validate_size']
+        config['train_split']
     )
 
     model = modules.construct_classifier()
     modules.compile_model(model, config['learning_rate'])
 
+    train.load_weights(model)
+
+    # train.validate(
+    #     model,
+    #     data.GenerateTestSet(100)
+    # )
+
+    train_set = data.GenerateTrainSet(200)
+    test_set = data.GenerateTestSet(100)
     train.train(
         model,
-        data.GenerateTrainSet(200),
-        data.GenerateTestSet(100)
+        train_set,
+        test_set
     )

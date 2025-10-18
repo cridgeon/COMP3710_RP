@@ -2,6 +2,8 @@ from keras import callbacks
 import matplotlib.pyplot as plt
 import json
 import tensorflow as tf
+import dataset
+import os
 
 config = json.load(open('recognition/siamese_kaggle_48020774/utility/config.json'))
 
@@ -16,6 +18,9 @@ save_callback = callbacks.ModelCheckpoint(
 )
 
 def load_weights(model):
+    if not os.path.exists(save_path):
+        print(f"No weights found at {save_path}")
+        return
     model.load_weights(save_path)
 
 def train(model, train_data, test_data):
@@ -50,3 +55,25 @@ def train(model, train_data, test_data):
     plt.ylim([min, max])
     plt.legend(loc='lower right')
     plt.show()
+
+def validate(model, validate_data):
+    X_val, Y_val, P_val, N_val = validate_data
+
+    # Get model predictions for the validation set
+    outputs = model.predict({
+        "input_anchor": X_val,
+        "input_label": Y_val,
+        "input_positive": P_val,
+        "input_negative": N_val
+    })
+
+
+    # For demonstration, use the first 20 samples
+    num_samples = min(25, len(X_val))
+    labels = Y_val[:num_samples]
+    outputs = outputs[:num_samples]
+
+    # correct = tf.reduce_sum(tf.equal(labels, outputs))[0]
+
+    dataset.plot_outputs(X_val[:num_samples], labels, outputs)
+   
