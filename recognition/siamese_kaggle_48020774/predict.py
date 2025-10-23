@@ -16,13 +16,15 @@ if __name__ == "__main__":
 
     train.load_weights(model)
 
-    # train.validate(
-    #     model,
-    #     data.GenerateTestSet(500)
-    # )
 
     train.train(
-        model,
+        model, 
         data,
-        1
+        1,
+        3000
+    )
+    
+    train.validate(
+        model,
+        data.GenerateTestSet(1000)
     )

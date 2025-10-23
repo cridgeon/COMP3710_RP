@@ -22,22 +22,17 @@ class DistanceLayer(layers.Layer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    def call(self, anchor, label, positive, negative):
-        ap_distance = ops.sum(tf.square(anchor - positive), -1)
-        an_distance = ops.sum(tf.square(anchor - negative), -1)
+    def call(self, anchor, positive, negative):
+        # ap_distance = ops.sum(tf.square(anchor - positive), -1)
+        # an_distance = ops.sum(tf.square(anchor - negative), -1)
+
+        ap_distance = tf.square(ops.norm(anchor - positive, axis=1))
+        an_distance = tf.square(ops.norm(anchor - negative, axis=1))
 
         ap_distance = tf.reshape(ap_distance, (-1, 1))
         an_distance = tf.reshape(an_distance, (-1, 1))
 
-        i = ap_distance * label
-        j = an_distance * (1 - label)
-        k = an_distance * label
-        l = ap_distance * (1 - label)
-
-        pos_dist = i + l
-        neg_dist = j + k
-
-        return (pos_dist, neg_dist)
+        return (ap_distance, an_distance)
     
     def compute_output_shape(self, input_shape):
         # input_shape is a list/tuple of 4 shapes: [anchor, label, positive, negative]
@@ -54,19 +49,26 @@ class TripletLoss(layers.Layer):
         self.loss = metrics.Mean(name="triplet_loss")
         self.alpha = alpha
 
-    def call(self, inputs):
-        ap_distance, an_distance = inputs
+    def call(self, distances, label):
+        ap_distance, an_distance = distances
+    
+        i = ap_distance * label
+        j = an_distance * (1 - label)
+        k = an_distance * label
+        l = ap_distance * (1 - label)
 
+        pos_dist = i + j
+        neg_dist = k + l
         # compute triplet loss
 
-        loss = ops.mean(ops.maximum(ap_distance - an_distance + self.alpha, 0.0))
+        loss = ops.mean(ops.maximum(pos_dist - neg_dist + self.alpha, 0.0))
 
         # update trackers (means over batch)
         self.loss.update_state(loss)
         self.add_loss(loss)
 
         # pass distances through unchanged
-        return inputs
+        return distances
 
     # expose trackers so Model logs them automatically
     @property
@@ -83,13 +85,32 @@ class DisplayLayer(layers.Layer):
     is closer to the positive (malignant) or negative (benign) example.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, threshold=0.5, **kwargs):
         super().__init__(**kwargs)
+        self.accuracy = metrics.BinaryAccuracy(name="accuracy")
+        self.AUCROC = metrics.AUC(name="AUCROC")
+        self.threshold = threshold
 
-    def call(self, distances):
+    def call(self, distances, labels):
         ap_distance, an_distance = distances
-        diff = ap_distance - an_distance
-        return tf.greater(diff, tf.zeros_like(diff))
+        total_diff = tf.add(ap_distance, an_distance)
+        positive_probability = tf.divide(an_distance, total_diff)
+        classifications = tf.greater(positive_probability, tf.ones_like(positive_probability, dtype=tf.float32) * self.threshold)
+        
+        labels_bool = tf.cast(labels, tf.bool)
+        self.accuracy.update_state(labels_bool, classifications)
+        # Remove the incorrect loss terms - metrics should not add losses
+        # self.add_loss(1.0 - self.accuracy.result())
+        self.AUCROC.update_state(labels_bool, positive_probability)
+        # self.add_loss(1.0 - self.AUCROC.result())
+        # self.add_loss(losses.BinaryCrossentropy()(labels, positive_probability))
+        
+        return classifications
+    
+    # expose trackers so Model logs them automatically
+    @property
+    def metrics(self):
+        return [self.accuracy, self.AUCROC]
     
     def compute_output_shape(self, *args, **kwargs):
         return (None,)
@@ -149,12 +170,11 @@ def construct_classifier():
 
     output_distances = DistanceLayer()(
         classifier(input_anchor),
-        input_label,
         classifier(input_positive),
         classifier(input_negative)
     )
-    loss_layer = TripletLoss(alpha=0.5, name='triplet_loss')(output_distances)
-    output_display = DisplayLayer(name='output_display')(loss_layer)
+    loss_layer = TripletLoss(alpha=0.5, name='triplet_loss')(output_distances, input_label)
+    output_display = DisplayLayer(name='output_display')(loss_layer, input_label)
 
     model = models.Model(
         inputs=[input_anchor, input_label, input_positive, input_negative],

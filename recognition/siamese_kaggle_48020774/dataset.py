@@ -290,7 +290,7 @@ def plot_random_pn_samples(Pos, Neg, n):
     plt.show()
 
 
-def plot_outputs(images, labels, outputs):
+def plot_outputs(images, labels, outputs, save_path=None):
     """
     Plots a random sample of test images with their labels.
 
@@ -317,6 +317,8 @@ def plot_outputs(images, labels, outputs):
         plt.imshow(img)
         plt.axis('off')
     plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
     plt.show()
 
 if __name__ == "__main__":
