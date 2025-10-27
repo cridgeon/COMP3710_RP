@@ -1,3 +1,4 @@
 data/
 __pycache__/
 siamese_model.weights.h5
+resources/siamese_model.weights_overfitting.h5

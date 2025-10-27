@@ -20,8 +20,8 @@ if __name__ == "__main__":
     train.train(
         model, 
         data,
-        1,
-        3000
+        10,
+        50
     )
     
     train.validate(

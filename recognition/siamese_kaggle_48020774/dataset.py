@@ -200,38 +200,46 @@ class Dataset:
     def GenerateTestSet(self, num):
         n_pos = int(self.class_split * num)
         n_neg = int((1 - self.class_split) * num)
+        # Ensure total matches num exactly
+        actual_num = n_pos + n_neg
 
         dataset, self.test_pos = rotate(self.test_pos, n_pos)
         d2, self.test_neg = rotate(self.test_neg, n_neg)
         dataset = dataset.concatenate(d2)
         dataset = shuffle(dataset)
         dataset = dataset.map(lambda x: self.load_from_path_(x))
-        X, Y = dataset.batch(num).take(1).get_single_element()
+        X, Y = dataset.batch(actual_num).take(1).get_single_element()
 
-        P, self.pos_ds = rotate(self.pos_ds, num)
-        P, _ = P.map(lambda x: self.load_from_path_(x)).batch(num).take(1).get_single_element()
-        N, self.neg_ds = rotate(self.neg_ds, num)
-        N, _ = N.map(lambda x: self.load_from_path_(x)).batch(num).take(1).get_single_element()
+        P_dataset, self.pos_ds = rotate(self.pos_ds, actual_num)
+        P_batch = P_dataset.map(lambda x: self.load_from_path_(x)).batch(actual_num).take(1).get_single_element()
+        P = P_batch[0]  # Extract only the images, not labels
+        
+        N_dataset, self.neg_ds = rotate(self.neg_ds, actual_num)
+        N_batch = N_dataset.map(lambda x: self.load_from_path_(x)).batch(actual_num).take(1).get_single_element()
+        N = N_batch[0]  # Extract only the images, not labels
 
         return X, Y, P, N
-
 
     def GenerateTrainSet(self, num):
         n_pos = int(self.class_split * num)
         n_neg = int((1 - self.class_split) * num)
+        # Ensure total matches num exactly
+        actual_num = n_pos + n_neg
 
         dataset, self.train_pos = rotate(self.train_pos, n_pos)
         d2, self.train_neg = rotate(self.train_neg, n_neg)
         dataset = dataset.concatenate(d2)
         dataset = shuffle(dataset)
         dataset = dataset.map(lambda x: self.load_from_path_(x))
-        X, Y = dataset.batch(num).take(1).get_single_element()
+        X, Y = dataset.batch(actual_num).take(1).get_single_element()
 
-        P, self.pos_ds = rotate(self.pos_ds, num)
-        P, _ = P.map(lambda x: self.load_from_path_(x)).batch(num).take(1).get_single_element()
-        N, self.neg_ds = rotate(self.neg_ds, num)
-        N, _ = N.map(lambda x: self.load_from_path_(x)).batch(num).take(1).get_single_element()
-
+        P_dataset, self.pos_ds = rotate(self.pos_ds, actual_num)
+        P_batch = P_dataset.map(lambda x: self.load_from_path_(x)).batch(actual_num).take(1).get_single_element()
+        P = P_batch[0]  # Extract only the images, not labels
+        
+        N_dataset, self.neg_ds = rotate(self.neg_ds, actual_num)
+        N_batch = N_dataset.map(lambda x: self.load_from_path_(x)).batch(actual_num).take(1).get_single_element()
+        N = N_batch[0]  # Extract only the images, not labels
 
         return X, Y, P, N
     

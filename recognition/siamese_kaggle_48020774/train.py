@@ -24,8 +24,9 @@ def load_weights(model):
         return
     model.load_weights(save_path)
 
-def train(model, dataset, rounds = 10, setSize=100):
+def train(model : Model, dataset : dataset.Dataset, rounds = 10, setSize=100):
 
+    total_history = None
 
     for i in range(rounds):
         print(f"--- Training round {i+1}/{rounds} ---")
@@ -33,6 +34,11 @@ def train(model, dataset, rounds = 10, setSize=100):
         X_train, Y_train, P_train, N_train = dataset.GenerateTrainSet(setSize)
         print("Generating testing data...")
         X_test, Y_test, P_test, N_test = dataset.GenerateTestSet(int(setSize / 6))
+        
+        # Print shapes for debugging
+        print(f"Training shapes: X:{X_train.shape}, Y:{Y_train.shape}, P:{P_train.shape}, N:{N_train.shape}")
+        print(f"Testing shapes: X:{X_test.shape}, Y:{Y_test.shape}, P:{P_test.shape}, N:{N_test.shape}")
+        
         print("Starting training...")
         history = model.fit(
             {
@@ -41,14 +47,19 @@ def train(model, dataset, rounds = 10, setSize=100):
                 "input_positive": P_train,
                 "input_negative": N_train
             },
+            # Use the actual batch size from the data
+            y=np.zeros(X_train.shape[0]),  # Dummy targets
             epochs=epochs,
             batch_size=batch_size,
-            validation_data={
-                "input_anchor": X_test,
-                "input_label": Y_test,
-                "input_positive": P_test,
-                "input_negative": N_test
-            },
+            validation_data=(
+                {
+                    "input_anchor": X_test,
+                    "input_label": Y_test,
+                    "input_positive": P_test,
+                    "input_negative": N_test
+                },
+                np.zeros(X_test.shape[0])  # Dummy validation targets
+            ),
             callbacks=[save_callback]
         )
         print("Recording history...")
@@ -88,6 +99,48 @@ def train(model, dataset, rounds = 10, setSize=100):
         plt.tight_layout()
         plt.savefig(f'training_plots_round_{i+1}.png', dpi=300, bbox_inches='tight')
         # plt.show()
+        
+        if total_history is None:
+            total_history = history.history
+        else:
+            for key in history.history:
+                total_history[key] += (history.history[key])
+    print("Training complete.")
+    print("Recording final plots...")
+    
+    plt.figure("Triplet loss vs Epoch")
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    
+    # Triplet Loss subplot
+    axes[0].plot(total_history['triplet_loss'], label='training loss')
+    axes[0].plot(total_history['val_triplet_loss'], label='validation loss')
+    axes[0].set_xlabel('Epoch')
+    axes[0].set_ylabel('Triplet Loss')
+    axes[0].set_yscale('log')
+    min_loss = np.min([tf.reduce_min(total_history['triplet_loss']), tf.reduce_min(total_history['val_triplet_loss'])])
+    max_loss = np.max([tf.reduce_max(total_history['triplet_loss']), tf.reduce_max(total_history['val_triplet_loss'])])
+    axes[0].set_ylim([min_loss, max_loss])
+    axes[0].legend(loc='lower right')
+    axes[0].set_title('Triplet Loss')
+    
+    # AUCROC subplot
+    axes[1].plot(total_history['AUCROC'], label='training AUCROC')
+    axes[1].plot(total_history['val_AUCROC'], label='validation AUCROC')
+    axes[1].set_xlabel('Epoch')
+    axes[1].set_ylabel('AUCROC')
+    axes[1].legend(loc='lower right')
+    axes[1].set_title('AUCROC')
+    
+    # Accuracy subplot
+    axes[2].plot(total_history['accuracy'], label='training accuracy')
+    axes[2].plot(total_history['val_accuracy'], label='validation accuracy')
+    axes[2].set_xlabel('Epoch')
+    axes[2].set_ylabel('Accuracy')
+    axes[2].legend(loc='lower right')
+    axes[2].set_title('Accuracy')
+    
+    plt.tight_layout()
+    plt.savefig(f'training_plots_total.png', dpi=300, bbox_inches='tight')
 
 def validate(model, validate_data):
     X_val, Y_val, P_val, N_val = validate_data
