@@ -1,9 +1,10 @@
 import dataset, modules, train
-import json
+from config import Config
 
 if __name__ == "__main__":
-    config = json.load(open('recognition/siamese_kaggle_48020774/utility/config.json'))
+    config = Config.getInstance()
 
+    print("Preparing dataset...")
     data = dataset.Dataset(
         config['data_dir'],
         config["max_images_in_ds"],
@@ -11,17 +12,18 @@ if __name__ == "__main__":
         config['train_split']
     )
 
+    print("Constructing model...")
     model = modules.construct_classifier()
+    print("Compiling model...")
     modules.compile_model(model, config['learning_rate'])
 
+    print("Loading weights if available...")
     train.load_weights(model)
-
 
     train.train(
         model, 
         data,
-        10,
-        50
+        1
     )
     
     train.validate(

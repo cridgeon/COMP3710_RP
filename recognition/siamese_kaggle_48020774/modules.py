@@ -46,10 +46,10 @@ class TripletLoss(layers.Layer):
 
     def __init__(self, alpha=0.5, name="triplet_loss", **kwargs):
         super().__init__(name=name, **kwargs)
-        self.loss = metrics.Mean(name="triplet_loss")
+        self.triplet_loss_tracker = metrics.Mean(name="triplet_loss")
         self.alpha = alpha
 
-    def call(self, distances, label):
+    def call(self, distances, label, training=None):
         ap_distance, an_distance = distances
     
         i = ap_distance * label
@@ -64,16 +64,19 @@ class TripletLoss(layers.Layer):
         loss = ops.mean(ops.maximum(pos_dist - neg_dist + self.alpha, 0.0))
 
         # update trackers (means over batch)
-        self.loss.update_state(loss)
+        self.triplet_loss_tracker.update_state(loss)
         self.add_loss(loss)
 
         # pass distances through unchanged
         return distances
 
+    def reset_states(self):
+        self.triplet_loss_tracker.reset_states()
+
     # expose trackers so Model logs them automatically
     @property
     def metrics(self):
-        return [self.loss]
+        return [self.triplet_loss_tracker]
     
     def compute_output_shape(self, input_shape):
         return input_shape
@@ -87,30 +90,35 @@ class DisplayLayer(layers.Layer):
 
     def __init__(self, threshold=0.5, **kwargs):
         super().__init__(**kwargs)
-        self.accuracy = metrics.BinaryAccuracy(name="accuracy")
-        self.AUCROC = metrics.AUC(name="AUCROC")
+        self.accuracy_tracker = metrics.BinaryAccuracy(name="accuracy")
+        self.AUCROC_tracker = metrics.AUC(name="AUCROC")
         self.threshold = threshold
 
-    def call(self, distances, labels):
+    def call(self, distances, labels, training=None):
         ap_distance, an_distance = distances
         total_diff = tf.add(ap_distance, an_distance)
         positive_probability = tf.divide(an_distance, total_diff)
         classifications = tf.greater(positive_probability, tf.ones_like(positive_probability, dtype=tf.float32) * self.threshold)
         
         labels_bool = tf.cast(labels, tf.bool)
-        self.accuracy.update_state(labels_bool, classifications)
+        self.accuracy_tracker.update_state(labels_bool, classifications)
         # Remove the incorrect loss terms - metrics should not add losses
         # self.add_loss(1.0 - self.accuracy.result())
-        self.AUCROC.update_state(labels_bool, positive_probability)
+        self.AUCROC_tracker.update_state(labels_bool, positive_probability)
         # self.add_loss(1.0 - self.AUCROC.result())
         # self.add_loss(losses.BinaryCrossentropy()(labels, positive_probability))
         
         return classifications
     
+    def reset_states(self):
+        """Reset the metrics state between training and validation phases"""
+        self.accuracy_tracker.reset_states()
+        self.AUCROC_tracker.reset_states()
+    
     # expose trackers so Model logs them automatically
     @property
     def metrics(self):
-        return [self.accuracy, self.AUCROC]
+        return [self.accuracy_tracker, self.AUCROC_tracker]
     
     def compute_output_shape(self, *args, **kwargs):
         return (None,)
@@ -174,19 +182,24 @@ def construct_classifier():
         classifier(input_negative)
     )
     loss_layer = TripletLoss(alpha=0.5, name='triplet_loss')(output_distances, input_label)
-    output_display = DisplayLayer(name='output_display')(loss_layer, input_label)
-
+    output_display = DisplayLayer(name='output_display')(loss_layer, input_label)uu
     model = models.Model(
         inputs=[input_anchor, input_label, input_positive, input_negative],
         outputs=output_display
     )
-
+    
+    # Explicitly add metrics from custom layers to ensure they are tracked during training
+    triplet_loss_layer = model.get_layer('triplet_loss')
+    display_layer = model.get_layer('output_display')
+    
     # classifier.summary()
     model.summary()
     return model
 
 def compile_model(model, learning_rate):
-    model.compile(optimizer=optimizers.Adam(learning_rate=learning_rate))
+    model.compile(
+        optimizer=optimizers.Adam(learning_rate=learning_rate)
+    )
 
 if __name__ == "__main__":
     model = construct_classifier()
