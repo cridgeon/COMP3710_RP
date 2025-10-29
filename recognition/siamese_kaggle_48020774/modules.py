@@ -1,5 +1,6 @@
-from keras import layers, models, losses, optimizers, ops, metrics
+from keras import layers, models, losses, optimizers, ops, metrics, Model
 import tensorflow as tf
+import dataset
 
 #adapted from 
 #REF: https://keras.io/examples/vision/siamese_network/
@@ -49,23 +50,16 @@ class TripletLoss(layers.Layer):
         self.triplet_loss_tracker = metrics.Mean(name="triplet_loss")
         self.alpha = alpha
 
-    def call(self, distances, label, training=None):
+    def call(self, distances, training=None):
         ap_distance, an_distance = distances
-    
-        i = ap_distance * label
-        j = an_distance * (1 - label)
-        k = an_distance * label
-        l = ap_distance * (1 - label)
-
-        pos_dist = i + j
-        neg_dist = k + l
         # compute triplet loss
 
-        loss = ops.mean(ops.maximum(pos_dist - neg_dist + self.alpha, 0.0))
+        loss = ops.mean(ops.maximum(ap_distance - an_distance + self.alpha, 0.0))
 
         # update trackers (means over batch)
         self.triplet_loss_tracker.update_state(loss)
         self.add_loss(loss)
+        # self.add_metric(self.triplet_loss_tracker.result(), name="triplet_loss", aggregation="mean")
 
         # pass distances through unchanged
         return distances
@@ -101,6 +95,10 @@ class DisplayLayer(layers.Layer):
         classifications = tf.greater(positive_probability, tf.ones_like(positive_probability, dtype=tf.float32) * self.threshold)
         
         labels_bool = tf.cast(labels, tf.bool)
+        
+        # logical XOR
+        classifications = tf.logical_and(tf.logical_or(classifications, labels_bool), tf.logical_not(tf.logical_and(classifications, labels_bool)))
+        
         self.accuracy_tracker.update_state(labels_bool, classifications)
         # Remove the incorrect loss terms - metrics should not add losses
         # self.add_loss(1.0 - self.accuracy.result())
@@ -177,28 +175,24 @@ def construct_classifier():
     input_negative = layers.Input(name='input_negative', shape=INPUT_SHAPE)
 
     output_distances = DistanceLayer()(
-        classifier(input_anchor),
-        classifier(input_positive),
-        classifier(input_negative)
+        classifier(dataset.TrainTestPreprocessor()(input_anchor)),
+        classifier(dataset.TrainTestPreprocessor()(input_positive)),
+        classifier(dataset.TrainTestPreprocessor()(input_negative))
     )
-    loss_layer = TripletLoss(alpha=0.5, name='triplet_loss')(output_distances, input_label)
-    output_display = DisplayLayer(name='output_display')(loss_layer, input_label)uu
+    loss_layer = TripletLoss(alpha=0.5, name='triplet_loss')(output_distances)
+    output_display = DisplayLayer(name='output_display')(loss_layer, input_label)
     model = models.Model(
         inputs=[input_anchor, input_label, input_positive, input_negative],
         outputs=output_display
     )
     
-    # Explicitly add metrics from custom layers to ensure they are tracked during training
-    triplet_loss_layer = model.get_layer('triplet_loss')
-    display_layer = model.get_layer('output_display')
-    
     # classifier.summary()
     model.summary()
     return model
 
-def compile_model(model, learning_rate):
+def compile_model(model : Model, learning_rate):
     model.compile(
-        optimizer=optimizers.Adam(learning_rate=learning_rate)
+        optimizer=optimizers.Adam(learning_rate=learning_rate),
     )
 
 if __name__ == "__main__":

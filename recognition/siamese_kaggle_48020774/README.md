@@ -104,6 +104,8 @@ image, while the negative one should not.
 
 <h3> Training Process </h3>
 
+The model is trained in the regular fashion for a siamese network. Hyperparameters for the training process are configurable in the `config.json` file.
+
 <h2> Using the model </h2>
 
 <h3> Download the dataset </h3>
@@ -145,3 +147,129 @@ Activate the environment:
 ```
 conda activate siamese-48020774
 ```
+
+<h3> Running the model </h3>
+
+To ensure the environment has been set up correctly, it is recommended that the 
+`dataset.py` file be run first. This will perform initial data sorting and a test
+computation of both a training and testing dataset.
+
+In order to run the model, include the relevant files in your custom script and
+follow a similar process to the one shown in `predict.py`. Alternatively, run
+`predict.py` for a training process that should provide similar results to those
+mentioned in this README.
+
+<h2> Results </h2>
+
+<h3> Metric Plots </h3>
+
+![Metric Plots](./resources/final_plots.png)
+
+The above plots show the history of Triplet loss, acurracy and AUCROC score over
+15 epochs of training after running `predict.py`. Traing metrics are not recorded,
+please read the [Footnotes](#notes) section. Plots show trends that align with desireable
+outcomes, however, are notably "unstable". This phenomena is likely due to the 
+significant reduction in size of the validation set when compared to the training set,
+as it is not unlikely for an epoch of training to not include data that closely
+resembles the data used for validating that epoch. In spite of this, average trends
+indicate rising classifier ability, demonstrating effective training.
+
+<h3> Confusion Matrix </h3>
+
+![Confision Matrix](./resources/confusion.png)
+
+The above matrix shows the distrubution of classifications on a validation set after
+training. Since our classifier is designed to detect cancerous samples, the most
+important statistic shown is the ratio of true to false positives, as falsely 
+identifying a malignant sample as benign could have life altering effect on a patient.
+The figure shows that the percent of true positives correctly identified is __%. This is 
+short of the desired 80% classification threshold, and so, further improvements to the 
+model, training or preprocessing should be undertaken, if this model were to be used 
+in practice.
+
+<h3> ROC Curve </h3>
+
+![ROC Curve](./resources/ROC.png)
+
+The above plot shows the ROC curve for the trained model on a validation set, the AUCROC
+score being __. This demonstrates that the model well trained for medical use, as one
+report states:
+>AUC values above 0.80 are generally considered clinically useful [[2]](https://pubmed.ncbi.nlm.nih.gov/38024184/)
+
+<h2 id="notes"> Footnotes </h2>
+
+In relation to the lack of Training metric plots. For some eldritch reason entirely
+incomprehensible to the human mind, using the tf.data api instead of loading the whole
+dataset into RAM before training, not only causes the training metrics to not be tracked
+but also forces the training to be run on the CPU, even when GPU support is avaliable
+and used for the other case. If you would like to resolve this issue yourself, I invite
+you go ahead, I however, refuse to spend more hours fighting with environment issues.
+
+The following is a message that I would like the corrdinator to read, along with any 
+other persons who care about course structure and assessment, although I doubt it 
+reach their eyes.
+
+This assignment is not difficult. Reading a few websites, remembering how to use
+tensorflow and implementing the relevant model can be done in 2 maybe 3 hours. If
+the purpose of this assignment is to teach students about the research process for
+implementing a model, it does the bare minimum for passable. Unfortunately, this
+process comes with unrelenting environment issues. I, and I am certain most others,
+have spent countless hours attempting endless solutions to creating a python environment
+that correctly supports the GPU when training. Since my opinion has recently become what
+can be considered professional, I would like to state that it is my professional opinion,
+that the lack of support resources avaliable for students in relation to preconfigured 
+environments is an utter failure of the UQ EAIT department, and is a direct reflection of
+the ability of the coordinator to provide students with the quality of tertiary 
+education that they pay for. Don't give me shit like "oh just use Rangpur its already set
+up and has enough compute for everyone". If that is something that you genuinely
+believe, then you are either kidding yourself or profoundly negligent of the fact that
+nobody has multiple hours to wait for a single process to even begin running. From 
+where I stand, it seems to me that "Shakes" has put in minimal effort to arranging 
+this course, not even bothering to write new assesment questions or assignments for
+multiple years. It is clear that he does not care. The students are the ones who pay you,
+make it worth our money.
+
+---
+
+And now for something completely different, but with the same energy.
+
+Python can go fuck itself. A dynamically typed, interpreted pile of shit. The design
+descisions that went into creating this language are foolish at best. Placing the burden 
+of repeatedly and manually type checking because the language will just cast your 
+variables to whatever the hell it wants without asking is one of the most diabolical
+schemes ever created. Better yet, why tell the programmer that what they are about to 
+run for hours will fail at the last moment before they go through the effort? Let's make 
+them need to rerun their files for multiple hours dealing with 10 step detatched error 
+messages that barely relate to what caused them. The only upside to this "professional" 
+language is the fact that there is barely any boilerplate. Just learn it for fucks sake 
+its not that hard.
+
+Any use of Python beyond 200 line single file utility scripts is a grave mistake. You
+compromise speed, memory efficiency, input safety, robustness, crash telemetry and just 
+about everything else. Any fool who thinks its reasonable to write real programs in 
+Python is just that. These "developers" are kidding themselves and making excuses not to
+learn how to deal with features in other programs that are actually useful, like
+pointer/reference use and low level memory management.
+
+I despise the reality that Python is the language of choice for teaching new programmers.
+It promotes a lack of critical thinking and analysis that is required of programmers who
+create systems that actually make a difference. Beyond baby's firt "Hello World!" and
+calculator, the "convinience" that Python provides is a plague on your systems. If you 
+can't hack it with a language like C++, or don't get satifaction out of making your 
+programs degrees faster by investigating and experimenting with new data structures and
+algorithms, I am fearful for the state of the programs you create.
+
+Python is a language that lets you convert files, plot data, rebroadcast signals, and 
+whip up **concept** GUIs with a single LLM prompt. Anything that cant be created by 
+asking an AI once for it, should never be implemented in python. This is not an 
+appropriate language for humans to spend their time writing in. Upskill yourself or pick 
+a different career. Most certainly don't make it out to newcomers that this language is
+one that they should feel secure using.
+
+In the end python is the ugly child that was born out of decades of abstraction, and it
+is breeding a new generation of programmers who have abilities not nearly comparable to
+those who have come before. It is a sad reality that the skill of many of the great
+programmers who pioneered things like banking systems, OSs, kernels, rocket systems and 
+so forth is lost, and seems to be a rarer and rarer asset. Those people deserve our 
+utmost respect. All who take this career seriously should strive to acheive their 
+ability.

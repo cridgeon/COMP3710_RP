@@ -78,7 +78,7 @@ class NormalizationLayer(layers.Layer):
     def call(self, inputs):
         inputs = inputs / 255.0
         inputs = (inputs - self.means) / self.stds
-        print("Normalised input shape:", inputs.shape)
+        # print("Normalised input shape:", inputs.shape)
         return inputs
 
 class PreprocessLayer(layers.Layer):
@@ -96,37 +96,28 @@ class PreprocessLayer(layers.Layer):
     def call(self, inputs):
         inputs = self.flip(inputs)
         # inputs = self.col(inputs)
-        print("Preprocessed input shape:", inputs.shape)
-        # inputs = self.norm(inputs)
+        # print("Preprocessed input shape:", inputs.shape)
+        inputs = self.norm(inputs)
         return inputs
+    
+class TrainTestPreprocessor(layers.Layer):
+    """
+    This layer is responsible for preprocessing the input images
+    before they are fed into the model.
+    During training, it applies data augmentation.
+    During testing, it only normalizes the images.
+    """
 
-def shuffle(dataset: tf.data.Dataset) -> tf.data.Dataset:
-    num = dataset.cardinality().numpy()
-    return dataset.shuffle(num)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.preprocess = PreprocessLayer()
+        self.norm = NormalizationLayer()
 
-def rotate(dataset: tf.data.Dataset, num):
-    if (num > dataset.cardinality().numpy()):
-        ret = dataset
-        add, dataset = rotate(dataset, num - dataset.cardinality().numpy())
-        ret = ret.concatenate(add)
-        return ret, dataset
-    ret = dataset.take(num)
-    dataset = dataset.skip(num).concatenate(ret)
-    return ret, dataset
-
-__global_norm_layer = NormalizationLayer()
-__global_preprocess_layer = PreprocessLayer()
-
-def load_from_path_(path, validation=False) -> Tuple[tf.Tensor, tf.Tensor]:
-    img = tf.io.read_file(path)
-    img = tf.image.decode_jpeg(img, channels=3)
-    img = tf.image.resize(img, [256, 256], method=tf.image.ResizeMethod.BILINEAR)
-    img = tf.cast(img, tf.float32)
-    if validation:
-        img = __global_norm_layer(tf.expand_dims(img, 0))[0]
-    else:
-        img = __global_preprocess_layer(tf.expand_dims(img, 0))[0]
-    return img
+    def call(self, inputs, training=None):
+        if training:
+            inputs = self.preprocess(inputs)
+        inputs = self.norm(inputs)
+        return inputs
 
 def label_from_path_(path):
     return 1 if tf.strings.regex_full_match(path, ".*pos.*") else 0
@@ -156,8 +147,6 @@ class Dataset:
         self.data_dir = data_dir
         self.class_split = class_split
         self.train_split = train_split
-        self.process_layer = PreprocessLayer()
-        self.norm_layer = NormalizationLayer()
 
         # Check if data_dir contains 'pos' and 'neg' directories
         has_pos_neg_dirs = (
@@ -189,6 +178,14 @@ class Dataset:
                 else:
                     dst_path = os.path.join(data_dir, "neg", name + ".jpg")
                 shutil.move(src_path, dst_path)
+
+        def pick_triplet(a_y, p_n):
+            a, y = a_y
+            p, n = p_n
+            y = tf.cast(tf.squeeze(y), tf.int32)
+            pos_sel = tf.where(tf.equal(y, 1), p, n)
+            neg_sel = tf.where(tf.equal(y, 1), n, p)
+            return ((a, y, pos_sel, neg_sel), y)   # <- (inputs, label)
         
         print("loading dataset from directories...")
         dataset : tf.data.Dataset = keras.utils.image_dataset_from_directory(
@@ -212,25 +209,59 @@ class Dataset:
         n_pos = 32542
         n_neg = 584
         
-        pos_val = pos.take(int(n_pos * train_split))
+        pos_test = pos.take(int(n_pos * train_split))
         pos_train = pos.skip(int(n_pos * train_split)).repeat() # train can have repeats since we are going to augment
-        neg_val = neg.take(int(n_neg * train_split))
-        neg_train = neg.skip(int(n_neg * train_split))
+        neg_test = neg.take(int(n_neg * train_split))
+        neg_train = neg.skip(int(n_neg * train_split)).repeat()
         
         # combine and preprocess
-        self.train_ds = tf.data.Dataset.sample_from_datasets(
+        # class-balanced anchors (image,label), augmented + normalized
+        train_ds = tf.data.Dataset.sample_from_datasets(
             [pos_train, neg_train],
             weights=[class_split, 1.0 - class_split],
-            stop_on_empty_dataset=True,
-            seed=np.random.randint(0, 1e6)
-        ).map(lambda x, y: (self.process_layer(x), y)).take(100)
-            
-        self.test_ds = tf.data.Dataset.sample_from_datasets(
-            [pos_val, neg_val],
+            stop_on_empty_dataset=False,  # keep going forever
+            seed=np.random.randint(0, 1_000_000),
+        ).map(lambda x, y: (x, tf.cast(y, tf.int32)),
+            num_parallel_calls=tf.data.AUTOTUNE)
+
+        # independent positive/negative pools (images only), also augmented+normalized
+        pos_pool = pos_train.map(lambda x, y: x,
+                                num_parallel_calls=tf.data.AUTOTUNE)
+        neg_pool = neg_train.map(lambda x, y: x,
+                                num_parallel_calls=tf.data.AUTOTUNE)
+
+        # zip once and pick p/n using the SAME y that came with the anchor
+        zipped = tf.data.Dataset.zip((train_ds, tf.data.Dataset.zip((pos_pool, neg_pool))))
+        # element: ((a, y), (p, n))
+
+        self.train_ds = (zipped
+            .map(pick_triplet, num_parallel_calls=tf.data.AUTOTUNE)
+            .batch(Config.getInstance()['batch_size'])
+            .prefetch(tf.data.AUTOTUNE))
+        
+        test_ds = tf.data.Dataset.sample_from_datasets(
+            [pos_test, neg_test],
             weights=[class_split, 1.0 - class_split],
-            stop_on_empty_dataset=True,
-            seed=np.random.randint(0, 1e6)
-        ).map(lambda x, y: (self.norm_layer(x), y)).take(100)
+            stop_on_empty_dataset=True, 
+            seed=np.random.randint(0, 1_000_000),
+        ).map(lambda x, y: (x, tf.cast(y, tf.int32)),
+            num_parallel_calls=tf.data.AUTOTUNE)
+
+        # independent positive/negative pools (images only), also augmented+normalized
+        pos_pool = pos_test.map(lambda x, y: x,
+                                num_parallel_calls=tf.data.AUTOTUNE)
+        neg_pool = neg_test.map(lambda x, y: x,
+                                num_parallel_calls=tf.data.AUTOTUNE)
+
+        # zip once and pick p/n using the SAME y that came with the anchor
+        zipped = tf.data.Dataset.zip((test_ds, tf.data.Dataset.zip((pos_pool, neg_pool))))
+        # element: ((a, y), (p, n))
+
+        self.test_ds = (zipped
+            .map(pick_triplet, num_parallel_calls=tf.data.AUTOTUNE)
+            .batch(Config.getInstance()['batch_size'])
+            .prefetch(tf.data.AUTOTUNE))
+
 
         print("Dataset initialized.")
         train_size = self.train_ds.cardinality().numpy()
@@ -241,46 +272,10 @@ class Dataset:
         print(f"Validation set size: {test_size} samples")
 
     def GenerateTestSet(self):
-        pos = self.test_ds.filter(lambda x, y: tf.squeeze(tf.equal(y, 1)))
-        neg = self.test_ds.filter(lambda x, y: tf.squeeze(tf.equal(y, 0)))
-
-        pos = pos\
-            .map(lambda x, y: x)\
-            .repeat()
-        neg = neg\
-            .map(lambda x, y: x)\
-            .repeat()
-
-        tmp = self.test_ds # not perfect but not enough RAM
-        anchor = tmp.map(lambda x, y: x)
-        label = tmp.map(lambda x, y: y)
-        dummy = tf.data.Dataset.from_tensor_slices([0]).repeat()
-        
-        ret = tf.data.Dataset.zip((anchor, label, pos, neg)) # should stop once the anchor/label sets are empty
-        ret = tf.data.Dataset.zip((ret, dummy))
-
-        return ret.batch(Config.getInstance()['batch_size'])
+        return self.test_ds
 
     def GenerateTrainSet(self):
-        pos = self.train_ds.filter(lambda x, y: tf.squeeze(tf.equal(y, 1)))
-        neg = self.train_ds.filter(lambda x, y: tf.squeeze(tf.equal(y, 0)))
-
-        pos = pos\
-            .map(lambda x, y: x)\
-            .repeat()
-        neg = neg\
-            .map(lambda x, y: x)\
-            .repeat()
-
-        tmp = self.train_ds.repeat() # not perfect but not enough RAM
-        anchor = tmp.map(lambda x, y: x)
-        label = tmp.map(lambda x, y: y)
-        dummy = tf.data.Dataset.from_tensor_slices([0]).repeat()
-        
-        ret = tf.data.Dataset.zip((anchor, label, pos, neg)) # should stop once the anchor/label sets are empty
-        ret = tf.data.Dataset.zip((ret, dummy))
-
-        return ret.batch(Config.getInstance()['batch_size'])
+        return self.train_ds
 
     # def GenerateValidateSet(self, num):
     #     return Dataset.GenerateSet_(num, self.validate_pm, self.validate_nm, self.class_split)

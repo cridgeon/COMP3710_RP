@@ -23,10 +23,10 @@ if __name__ == "__main__":
     train.train(
         model, 
         data,
-        1
+        15
     )
     
     train.validate(
         model,
-        data.GenerateTestSet(1000)
+        data
     )

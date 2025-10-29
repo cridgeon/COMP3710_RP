@@ -3,8 +3,8 @@
     "max_images_in_ds": 100,
     "train_split": 0.2,
     "class_split": 0.2,
-    "batch_size": 2,
-    "epochs": 1,
+    "batch_size": 16,
+    "epochs": 15,
     "learning_rate": 0.00001,
     "classification_threshold": 0.5,
     "model_save_path": "recognition/siamese_kaggle_48020774/siamese_model.weights.h5"
