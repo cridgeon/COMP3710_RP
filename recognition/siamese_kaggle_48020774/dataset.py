@@ -206,7 +206,7 @@ class Dataset:
         dataset, self.test_pos = rotate(self.test_pos, n_pos)
         d2, self.test_neg = rotate(self.test_neg, n_neg)
         dataset = dataset.concatenate(d2)
-        dataset = shuffle(dataset)
+        # dataset = shuffle(dataset)
         dataset = dataset.map(lambda x: self.load_from_path_(x))
         X, Y = dataset.batch(actual_num).take(1).get_single_element()
 
@@ -229,7 +229,7 @@ class Dataset:
         dataset, self.train_pos = rotate(self.train_pos, n_pos)
         d2, self.train_neg = rotate(self.train_neg, n_neg)
         dataset = dataset.concatenate(d2)
-        dataset = shuffle(dataset)
+        # dataset = shuffle(dataset)
         dataset = dataset.map(lambda x: self.load_from_path_(x))
         X, Y = dataset.batch(actual_num).take(1).get_single_element()
 

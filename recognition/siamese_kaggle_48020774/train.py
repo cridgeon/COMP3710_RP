@@ -5,6 +5,7 @@ import tensorflow as tf
 import dataset
 import os
 import numpy as np
+import pandas as pd
 
 config = json.load(open('recognition/siamese_kaggle_48020774/utility/config.json'))
 
@@ -65,46 +66,51 @@ def train(model : Model, dataset : dataset.Dataset, rounds = 10, setSize=100):
         print("Recording history...")
 
 
-        plt.figure("Triplet loss vs Epoch")
-        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+        # plt.figure("Triplet loss vs Epoch")
+        # fig, axes = plt.subplots(1, 3, figsize=(15, 5))
         
-        # Triplet Loss subplot
-        axes[0].plot(history.history['triplet_loss'], label='training loss')
-        axes[0].plot(history.history['val_triplet_loss'], label='validation loss')
-        axes[0].set_xlabel('Epoch')
-        axes[0].set_ylabel('Triplet Loss')
-        axes[0].set_yscale('log')
-        min_loss = np.min([tf.reduce_min(history.history['triplet_loss']), tf.reduce_min(history.history['val_triplet_loss'])])
-        max_loss = np.max([tf.reduce_max(history.history['triplet_loss']), tf.reduce_max(history.history['val_triplet_loss'])])
-        axes[0].set_ylim([min_loss, max_loss])
-        axes[0].legend(loc='lower right')
-        axes[0].set_title('Triplet Loss')
+        # # Triplet Loss subplot
+        # axes[0].plot(history.history['triplet_loss'], label='training loss')
+        # axes[0].plot(history.history['val_triplet_loss'], label='validation loss')
+        # axes[0].set_xlabel('Epoch')
+        # axes[0].set_ylabel('Triplet Loss')
+        # axes[0].set_yscale('log')
+        # min_loss = np.min([tf.reduce_min(history.history['triplet_loss']), tf.reduce_min(history.history['val_triplet_loss'])])
+        # max_loss = np.max([tf.reduce_max(history.history['triplet_loss']), tf.reduce_max(history.history['val_triplet_loss'])])
+        # axes[0].set_ylim([min_loss, max_loss])
+        # axes[0].legend(loc='lower right')
+        # axes[0].set_title('Triplet Loss')
         
-        # AUCROC subplot
-        axes[1].plot(history.history['AUCROC'], label='training AUCROC')
-        axes[1].plot(history.history['val_AUCROC'], label='validation AUCROC')
-        axes[1].set_xlabel('Epoch')
-        axes[1].set_ylabel('AUCROC')
-        axes[1].legend(loc='lower right')
-        axes[1].set_title('AUCROC')
+        # # AUCROC subplot
+        # axes[1].plot(history.history['AUCROC'], label='training AUCROC')
+        # axes[1].plot(history.history['val_AUCROC'], label='validation AUCROC')
+        # axes[1].set_xlabel('Epoch')
+        # axes[1].set_ylabel('AUCROC')
+        # axes[1].legend(loc='lower right')
+        # axes[1].set_title('AUCROC')
         
-        # Accuracy subplot
-        axes[2].plot(history.history['accuracy'], label='training accuracy')
-        axes[2].plot(history.history['val_accuracy'], label='validation accuracy')
-        axes[2].set_xlabel('Epoch')
-        axes[2].set_ylabel('Accuracy')
-        axes[2].legend(loc='lower right')
-        axes[2].set_title('Accuracy')
+        # # Accuracy subplot
+        # axes[2].plot(history.history['accuracy'], label='training accuracy')
+        # axes[2].plot(history.history['val_accuracy'], label='validation accuracy')
+        # axes[2].set_xlabel('Epoch')
+        # axes[2].set_ylabel('Accuracy')
+        # axes[2].legend(loc='lower right')
+        # axes[2].set_title('Accuracy')
         
-        plt.tight_layout()
-        plt.savefig(f'training_plots_round_{i+1}.png', dpi=300, bbox_inches='tight')
-        # plt.show()
+        # plt.tight_layout()
+        # plt.savefig(f'training_plots_round_{i+1}.png', dpi=300, bbox_inches='tight')
+        # # plt.show()
         
         if total_history is None:
             total_history = history.history
         else:
             for key in history.history:
                 total_history[key] += (history.history[key])
+                
+        # Save history to CSV after each round
+        history_df = pd.DataFrame(total_history)
+        history_df.to_csv(f'training_history_round_{i+1}.csv', index=False)
+        print(f"History saved to training_history_round_{i+1}.csv")
     print("Training complete.")
     print("Recording final plots...")
     
