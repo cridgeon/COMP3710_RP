@@ -53,7 +53,6 @@ def train(model : Model, dataset : dataset.Dataset, epochs : int):
         epochs=epochs,
         steps_per_epoch=100,  # Increased from 60 for better learning
         validation_data=test_ds,
-        validation_steps=50,  # Increased proportionally
         callbacks=[save_callback, lr_scheduler, early_stopping]
     )
     print("Recording history...")

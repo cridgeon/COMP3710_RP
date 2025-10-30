@@ -7,7 +7,6 @@ if __name__ == "__main__":
     print("Preparing dataset...")
     data = dataset.Dataset(
         config['data_dir'],
-        config["max_images_in_ds"],
         config['class_split'],
         config['train_split']
     )

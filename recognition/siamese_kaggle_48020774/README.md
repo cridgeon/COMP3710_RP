@@ -2,7 +2,7 @@
 
 <h2> Prerequisites </h2>
 
-Ensure you have [Miniconda](https://www.anaconda.com/docs/getting-started/miniconda/main) installed.
+Ensure you have [Anaconda](https://www.anaconda.com/docs/getting-started/anaconda/main) installed.
 
 <h2> Notes </h2>
 
@@ -36,9 +36,6 @@ Below is a list of hyperparameters and their functions
 | Name | Function |
 | ---- | -------- |
 | `data_dir`         | Directory where the dataset is stored relative to working directory|
-| `train_size`       | the number of images to use in the training dataset          |
-| `test_size`        | the number of images to use in the testing dataset           |
-| `validate_size`    | the number of images to use in the validation dataset        |
 | `class_split`      | Proportion of positive (malignant) samples in the dataset.   |
 | `batch_size`       | Number of samples per training batch.                  |
 | `epochs`           | Number of training epochs.                             |
@@ -207,30 +204,6 @@ dataset into RAM before training, not only causes the training metrics to not be
 but also forces the training to be run on the CPU, even when GPU support is avaliable
 and used for the other case. If you would like to resolve this issue yourself, I invite
 you go ahead, I however, refuse to spend more hours fighting with environment issues.
-
-The following is a message that I would like the corrdinator to read, along with any 
-other persons who care about course structure and assessment, although I doubt it 
-reach their eyes.
-
-This assignment is not difficult. Reading a few websites, remembering how to use
-tensorflow and implementing the relevant model can be done in 2 maybe 3 hours. If
-the purpose of this assignment is to teach students about the research process for
-implementing a model, it does the bare minimum for passable. Unfortunately, this
-process comes with unrelenting environment issues. I, and I am certain most others,
-have spent countless hours attempting endless solutions to creating a python environment
-that correctly supports the GPU when training. Since my opinion has recently become what
-can be considered professional, I would like to state that it is my professional opinion,
-that the lack of support resources avaliable for students in relation to preconfigured 
-environments is an utter failure of the UQ EAIT department, and is a direct reflection of
-the ability of the coordinator to provide students with the quality of tertiary 
-education that they pay for. Don't give me shit like "oh just use Rangpur its already set
-up and has enough compute for everyone". If that is something that you genuinely
-believe, then you are either kidding yourself or profoundly negligent of the fact that
-nobody has multiple hours to wait for a single process to even begin running. From 
-where I stand, it seems to me that "Shakes" has put in minimal effort to arranging 
-this course, not even bothering to write new assesment questions or assignments for
-multiple years. It is clear that he does not care. The students are the ones who pay you,
-make it worth our money.
 
 ---
 

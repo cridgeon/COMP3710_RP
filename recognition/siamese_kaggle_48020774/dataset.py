@@ -39,23 +39,25 @@ class PreprocessLayer(layers.Layer):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self.jit = layers.RandomColorJitter([0, 255], 0.1, 0.1, 0.1, 0.1)
 
     def call(self, inputs):
         # More diverse data augmentation for better generalization
         inputs = tf.image.random_flip_left_right(inputs)
         inputs = tf.image.random_flip_up_down(inputs)
+        inputs = self.jit(inputs)
         
         # Color augmentations with more variation
-        inputs = tf.image.random_brightness(inputs, max_delta=0.15)  # Increased from 0.1
-        inputs = tf.image.random_contrast(inputs, lower=0.8, upper=1.2)  # Increased range
-        inputs = tf.image.random_saturation(inputs, lower=0.8, upper=1.2)  # Increased range
-        inputs = tf.image.random_hue(inputs, max_delta=0.15)  # Increased from 0.1
+        # inputs = tf.image.random_brightness(inputs, max_delta=0.15)  # Increased from 0.1
+        # inputs = tf.image.random_contrast(inputs, lower=0.8, upper=1.2)  # Increased range
+        # inputs = tf.image.random_saturation(inputs, lower=0.8, upper=1.2)  # Increased range
+        # inputs = tf.image.random_hue(inputs, max_delta=0.15)  # Increased from 0.1
         
         # Random crop and resize for translation invariance
-        shape = tf.shape(inputs)
-        crop_size = tf.cast(tf.cast(shape[1:3], tf.float32) * 0.9, tf.int32)  # 90% crop
-        inputs = tf.image.random_crop(inputs, [shape[0], crop_size[0], crop_size[1], shape[3]])
-        inputs = tf.image.resize(inputs, [256, 256])
+        # shape = tf.shape(inputs)
+        # crop_size = tf.cast(tf.cast(shape[1:3], tf.float32) * 0.9, tf.int32)  # 90% crop
+        # inputs = tf.image.random_crop(inputs, [shape[0], crop_size[0], crop_size[1], shape[3]])
+        # inputs = tf.image.resize(inputs, [256, 256])
         
         return inputs
     
@@ -79,7 +81,7 @@ class TrainTestPreprocessor(layers.Layer):
         return inputs
 
 class Dataset:
-    def __init__(self, data_dir: str, max_images: int, class_split: float, train_split: int):
+    def __init__(self, data_dir: str, class_split: float, train_split: int):
         """
         Loads all images from a folder into a single 4-D tenso.
         
@@ -179,8 +181,8 @@ class Dataset:
         neg_labeled = neg_paths.map(lambda p: (p, tf.constant(0, tf.int32)), num_parallel_calls=tf.data.AUTOTUNE)
 
         # validation anchors (finite; no repeat)
-        pos_val_anchors = pos_labeled.take(k_pos).repeat()
-        neg_val_anchors = neg_labeled.take(k_neg).repeat()
+        pos_val_anchors = pos_labeled.take(k_pos)
+        neg_val_anchors = neg_labeled.take(k_neg)
 
         # training anchors (infinite; repeat + shuffle)
         pos_train_stream = pos_labeled.skip(k_pos).repeat().shuffle(8192, reshuffle_each_iteration=True)

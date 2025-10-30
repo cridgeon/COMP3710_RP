@@ -12,7 +12,7 @@ class Config(object):
         if cls._instance is None:
             print('Creating new instance')
             cls._instance = cls.__new__(cls)
-            cls._config_json = json.load(open('recognition/siamese_kaggle_48020774/utility/config.json'))
+            cls._config_json = json.load(open('utility/config.json'))
             # Put any initialization here.
         return cls._instance
 

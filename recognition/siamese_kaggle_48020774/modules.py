@@ -1,4 +1,4 @@
-from keras import layers, models, losses, optimizers, ops, metrics, Model
+from keras import layers, models, losses, optimizers, ops, metrics, Model, applications
 import tensorflow as tf
 import dataset
 
@@ -127,21 +127,24 @@ class EncoderHead(layers.Layer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.flat = layers.Flatten()
-        self.dense1 = layers.Dense(512, activation='relu')
-        self.dropout1 = layers.Dropout(0.7)  # Increased from 0.5
+        self.dense1 = layers.Dense(1024, activation='relu')
+        self.dropout1 = layers.Dropout(0.3)  # Increased from 0.5
         self.dense2 = layers.Dense(512, activation='relu')  # Reduced from 512
-        self.dropout2 = layers.Dropout(0.7)  # Increased from 0.5
+        self.dropout2 = layers.Dropout(0.3)  # Increased from 0.5
         self.dense3 = layers.Dense(256, activation='relu')  # Reduced from 256
+        self.dropout3 = layers.Dropout(0.3)  # Increased from 0.5
 
     def call(self, resnet_output):
         # haha python is stupid
-        return self.dense3(
-            self.dropout2(
-                self.dense2(
-                    self.dropout1(
-                        self.dense1(
-                            self.flat(
-                                resnet_output
+        return self.dropout3(
+            self.dense3(
+                self.dropout2(
+                    self.dense2(
+                        self.dropout1(
+                            self.dense1(
+                                self.flat(
+                                    resnet_output
+                                )
                             )
                         )
                     )
@@ -151,8 +154,8 @@ class EncoderHead(layers.Layer):
 
 
 def construct_classifier():
-    base_cnn = tf.keras.applications.ResNet50(
-        include_top=False, 
+    base_cnn = applications.ResNet50(
+        include_top=False,
         weights='imagenet', 
         input_shape=INPUT_SHAPE
     )
