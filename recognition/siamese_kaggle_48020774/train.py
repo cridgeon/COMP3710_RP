@@ -19,6 +19,25 @@ save_callback = callbacks.ModelCheckpoint(
     verbose=1
 )
 
+# Add learning rate scheduler for better convergence
+lr_scheduler = callbacks.ReduceLROnPlateau(
+    monitor='val_triplet_loss',
+    factor=0.5,
+    patience=3,
+    min_lr=1e-6,
+    verbose=1,
+    mode='min'
+)
+
+# Add early stopping to prevent overfitting
+early_stopping = callbacks.EarlyStopping(
+    monitor='val_triplet_loss',
+    patience=5,
+    restore_best_weights=True,
+    verbose=1,
+    mode='min'
+)
+
 def load_weights(model):
     if not os.path.exists(__save_path):
         print(f"No weights found at {__save_path}")
@@ -36,10 +55,10 @@ def train(model : Model, dataset : dataset.Dataset, epochs : int):
         train_ds,
         # Use the actual batch size from the data
         epochs=epochs,
-        steps_per_epoch=30,
+        steps_per_epoch=100,  # Increased from 60 for better learning
         validation_data=test_ds,
-        validation_steps=15,
-        callbacks=[save_callback]
+        validation_steps=50,  # Increased proportionally
+        callbacks=[save_callback, lr_scheduler, early_stopping]
     )
     print("Recording history...")
     
@@ -104,34 +123,57 @@ def train(model : Model, dataset : dataset.Dataset, epochs : int):
     print("Training complete.")
 
 def validate(model: Model, data : dataset.Dataset):
+    # Create plots directory if it doesn't exist
+    os.makedirs("plots", exist_ok=True)
+    
     test_ds = data.GenerateTestSet()
 
-    # Get model predictions for the validation set
-    outputs = model.predict(test_ds)
+    # Collect predictions and labels from the validation set
+    predictions = []
+    labels = []
     
+    for batch_idx, (inputs, targets) in enumerate(test_ds.take(50)):  # Take 50 batches for validation
+        # inputs is ((anchor, label, positive, negative), label)
+        batch_predictions = model.predict_on_batch(inputs)
+        batch_labels = targets.numpy()
+        
+        predictions.extend(batch_predictions.flatten())
+        labels.extend(batch_labels.flatten())
     
-    labels = test_ds.unbatch().map(lambda x, y: x).map(lambda a,y,p,n: y)
+    predictions = np.array(predictions)
+    labels = np.array(labels)
     
-    cm = confusion_matrix(labels, outputs)
+    # Convert predictions to binary (0 or 1)
+    binary_predictions = (predictions > 0.5).astype(int)
+    
+    # Create confusion matrix
+    cm = confusion_matrix(labels, binary_predictions)
     class_labels = ['benign', 'malignant']
-    plt.figure()
+    plt.figure(figsize=(8, 6))
     sns.heatmap(cm, annot=True, fmt="d", cmap="Blues", xticklabels=class_labels, yticklabels=class_labels)
     plt.title("Confusion Matrix")
     plt.xlabel("Predicted")
     plt.ylabel("Actual")
-    plt.savefig("plots/confusion_matrix.png")
+    plt.savefig("plots/confusion_matrix.png", dpi=300, bbox_inches='tight')
     plt.close()
 
-    fpr, tpr, _ = roc_curve(labels, outputs)
+    # Create ROC curve
+    fpr, tpr, _ = roc_curve(labels, predictions)
+    auc_score = np.trapz(tpr, fpr)
     
-    plt.figure()
-    plt.plot(fpr, tpr, lw=2, label=f"ROC curve")
-    plt.plot([0, 1], [0, 1], lw=2, linestyle="--")
+    plt.figure(figsize=(8, 6))
+    plt.plot(fpr, tpr, lw=2, label=f"ROC curve (AUC = {auc_score:.3f})")
+    plt.plot([0, 1], [0, 1], lw=2, linestyle="--", label="Random")
     plt.xlim([0.0, 1.0])
     plt.ylim([0.0, 1.05])
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
     plt.title("ROC Curve")
-    plt.savefig("plots/roc.png")
+    plt.legend()
+    plt.savefig("plots/roc.png", dpi=300, bbox_inches='tight')
     plt.close()
+    
+    print(f"Validation complete. AUC: {auc_score:.3f}")
+    print(f"Confusion Matrix:\n{cm}")
+    print(f"Accuracy: {np.sum(binary_predictions == labels) / len(labels):.3f}")
    

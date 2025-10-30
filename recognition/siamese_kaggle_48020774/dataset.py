@@ -9,60 +9,10 @@ from keras import layers
 import keras
 import json
 import shutil
-
 from config import Config
 
 def list_ISIC_images(folder):
     return sorted([f.split(".")[0] for f in os.listdir(folder) if f.endswith(".jpg")])
-
-def load_image_(name):
-    xb = tf.io.read_file(os.path.join("recognition/siamese_kaggle_48020774/data/images/" + name + ".jpg"))
-    x  = tf.image.decode_jpeg(xb, channels=3)
-    x  = tf.image.resize(x, [256, 256], method=tf.image.ResizeMethod.BILINEAR)
-    # x  = tf.cast(x, tf.float32) / 255.0 - 0.5
-
-    return x
-
-def load_tensors_(img_meta, pos_meta, neg_meta, images, labels, positives, negatives):
-    for i in range(img_meta.shape[0]):
-        name = img_meta.iloc[i]['image_name']
-
-        x = load_image_(name)
-        x = PreprocessLayer()(tf.expand_dims(x, 0))[0]
-        images.append(x)
-        labels.append(pos_meta.iloc[i]['target'])
-    for i in range(pos_meta.shape[0]):
-        name = pos_meta.iloc[i]['image_name']
-
-        x = load_image_(name)
-        x = PreprocessLayer()(tf.expand_dims(x, 0))[0]
-        positives.append(x)
-    for i in range(neg_meta.shape[0]):
-        name = neg_meta.iloc[i]['image_name']
-
-        x = load_image_(name)
-        x = PreprocessLayer()(tf.expand_dims(x, 0))[0]
-        negatives.append(x)
-
-def GenerateSet_(num, pos_meta: pd.DataFrame, neg_meta: pd.DataFrame, class_split: float):
-    X, Y, P, N = [], [], [], []
-
-    n_pos = class_split * num
-    n_neg = (1 - class_split) * num
-    num = int(n_pos) + int(n_neg)
-
-    im = pd.concat([pos_meta.sample(n=int(n_pos)), neg_meta.sample(n=int(n_neg))]).sample(frac=1).reset_index(drop=True)
-    pm = pos_meta.sample(n=num)
-    nm = neg_meta.sample(n=num)
-
-    load_tensors_(im, pm, nm, X, Y, P, N)
-
-    X = tf.stack(X, 0)
-    Y = tf.convert_to_tensor(Y, dtype=tf.float32)
-    P = tf.stack(P, 0)
-    N = tf.stack(N, 0)
-
-    return X,Y,P,N
 
 class NormalizationLayer(layers.Layer):
     """
@@ -118,9 +68,6 @@ class TrainTestPreprocessor(layers.Layer):
             inputs = self.preprocess(inputs)
         inputs = self.norm(inputs)
         return inputs
-
-def label_from_path_(path):
-    return 1 if tf.strings.regex_full_match(path, ".*pos.*") else 0
 
 class Dataset:
     def __init__(self, data_dir: str, max_images: int, class_split: float, train_split: int):
@@ -179,88 +126,182 @@ class Dataset:
                     dst_path = os.path.join(data_dir, "neg", name + ".jpg")
                 shutil.move(src_path, dst_path)
 
-        def pick_triplet(a_y, p_n):
-            a, y = a_y
-            p, n = p_n
-            y = tf.cast(tf.squeeze(y), tf.int32)
-            pos_sel = tf.where(tf.equal(y, 1), p, n)
-            neg_sel = tf.where(tf.equal(y, 1), n, p)
-            return ((a, y, pos_sel, neg_sel), y)   # <- (inputs, label)
+        def pick_triplet_paths(a_y, p_n):
+            # a_y:  (a_path, y) ; p_n: (p_path, n_path)
+            a_path, y = a_y
+            p_path, n_path = p_n
+            y = tf.cast(y, tf.int32)
+            pos_path = tf.where(tf.equal(y, 1), p_path, n_path)
+            neg_path = tf.where(tf.equal(y, 1), n_path, p_path)
+            return (a_path, pos_path, neg_path, y)
+
+        def load_triplet(a_path, p_path, n_path, y):
+            def _load(p):
+                img = tf.io.read_file(p)
+                img = tf.image.decode_jpeg(img, channels=3)
+                img = tf.image.resize(img, [256, 256], method=tf.image.ResizeMethod.BILINEAR)
+                return tf.cast(img, tf.float32)
+            a = _load(a_path); p = _load(p_path); n = _load(n_path)
+            # Keras expects (inputs, label). If your model takes (a,p,n) as inputs:
+            y = tf.cast(y, tf.int32)
+            return ((a, y, p, n), y)
+
+        # -------------- train/val split with your hard counts ----------------
+        pos_files = list_ISIC_images(f"{data_dir}/pos")
+        neg_files = list_ISIC_images(f"{data_dir}/neg")
+        for (i, f) in enumerate(pos_files):
+            pos_files[i] = f"{data_dir}/pos/{f}.jpg"
+        for (i, f) in enumerate(neg_files):
+            neg_files[i] = f"{data_dir}/neg/{f}.jpg"
+
+        n_pos = len(pos_files)
+        n_neg = len(neg_files)
+        assert n_pos > 0 and n_neg > 0, "No files found; check data_dir and class folders"
+
+        k_pos = max(1, int(n_pos * train_split))
+        k_neg = max(1, int(n_neg * train_split))
         
-        print("loading dataset from directories...")
-        dataset : tf.data.Dataset = keras.utils.image_dataset_from_directory(
-            data_dir,
-            labels="inferred",
-            label_mode="binary",
-            class_names=[
-                "neg",
-                "pos"
-            ],
-            color_mode="rgb",
-            image_size=(256, 256),
-            batch_size=None,
-            interpolation="bilinear",
+        # -------------- build labeled path datasets ----------------
+        pos_paths = tf.data.Dataset.from_tensor_slices(pos_files)
+        neg_paths = tf.data.Dataset.from_tensor_slices(neg_files)
+
+        # attach labels (1 for pos, 0 for neg) — specify num_parallel_calls properly
+        pos_labeled = pos_paths.map(lambda p: (p, tf.constant(1, tf.int32)), num_parallel_calls=tf.data.AUTOTUNE)
+        neg_labeled = neg_paths.map(lambda p: (p, tf.constant(0, tf.int32)), num_parallel_calls=tf.data.AUTOTUNE)
+
+        # validation anchors (finite; no repeat)
+        pos_val_anchors = pos_labeled.take(k_pos).repeat()
+        neg_val_anchors = neg_labeled.take(k_neg).repeat()
+
+        # training anchors (infinite; repeat + shuffle)
+        pos_train_stream = pos_labeled.skip(k_pos).repeat().shuffle(8192, reshuffle_each_iteration=True)
+        neg_train_stream = neg_labeled.skip(k_neg).repeat().shuffle(8192, reshuffle_each_iteration=True)
+
+        # partner pools (images only, infinite). We keep them separate for train/val.
+        pos_pool_train = pos_train_stream.map(lambda p, y: p, num_parallel_calls=tf.data.AUTOTUNE)
+        neg_pool_train = neg_train_stream.map(lambda p, y: p, num_parallel_calls=tf.data.AUTOTUNE)
+
+        pos_pool_val = pos_val_anchors.map(lambda p, y: p, num_parallel_calls=tf.data.AUTOTUNE).repeat()
+        neg_pool_val = neg_val_anchors.map(lambda p, y: p, num_parallel_calls=tf.data.AUTOTUNE).repeat()
+
+        # -------------- TRAIN dataset (infinite) ----------------
+        train_anchors = tf.data.Dataset.sample_from_datasets(
+            [pos_train_stream, neg_train_stream],
+            weights=[class_split, 1.0 - class_split],
+            stop_on_empty_dataset=False,
+            seed=42,
         )
-        print("Dataset loaded. Splitting and generating desired class balance...")
-        pos = dataset.filter(lambda x, y: tf.squeeze(tf.equal(y, 1)))
-        neg = dataset.filter(lambda x, y: tf.squeeze(tf.equal(y, 0)))
-        
-        # achieve desired class split
-        n_pos = 32542
-        n_neg = 584
-        
-        pos_test = pos.take(int(n_pos * train_split))
-        pos_train = pos.skip(int(n_pos * train_split)).repeat() # train can have repeats since we are going to augment
-        neg_test = neg.take(int(n_neg * train_split))
-        neg_train = neg.skip(int(n_neg * train_split)).repeat()
-        
-        # combine and preprocess
-        # class-balanced anchors (image,label), augmented + normalized
-        train_ds = tf.data.Dataset.sample_from_datasets(
-            [pos_train, neg_train],
-            weights=[class_split, 1.0 - class_split],
-            stop_on_empty_dataset=False,  # keep going forever
-            seed=np.random.randint(0, 1_000_000),
-        ).map(lambda x, y: (x, tf.cast(y, tf.int32)),
-            num_parallel_calls=tf.data.AUTOTUNE)
 
-        # independent positive/negative pools (images only), also augmented+normalized
-        pos_pool = pos_train.map(lambda x, y: x,
-                                num_parallel_calls=tf.data.AUTOTUNE)
-        neg_pool = neg_train.map(lambda x, y: x,
-                                num_parallel_calls=tf.data.AUTOTUNE)
+        train_zipped = tf.data.Dataset.zip((train_anchors,
+                                            tf.data.Dataset.zip((pos_pool_train, neg_pool_train))))
 
-        # zip once and pick p/n using the SAME y that came with the anchor
-        zipped = tf.data.Dataset.zip((train_ds, tf.data.Dataset.zip((pos_pool, neg_pool))))
-        # element: ((a, y), (p, n))
+        train_triplet_paths = train_zipped.map(pick_triplet_paths, num_parallel_calls=tf.data.AUTOTUNE)
 
-        self.train_ds = (zipped
-            .map(pick_triplet, num_parallel_calls=tf.data.AUTOTUNE)
-            .batch(Config.getInstance()['batch_size'])
+        self.train_ds = (train_triplet_paths
+            .map(load_triplet, num_parallel_calls=tf.data.AUTOTUNE)
+            .batch(Config.getInstance()['batch_size'], drop_remainder=True)
             .prefetch(tf.data.AUTOTUNE))
-        
-        test_ds = tf.data.Dataset.sample_from_datasets(
-            [pos_test, neg_test],
+
+        # -------------- VALIDATION dataset (finite anchors) ----------------
+        val_anchors = tf.data.Dataset.sample_from_datasets(
+            [pos_val_anchors, neg_val_anchors],
             weights=[class_split, 1.0 - class_split],
-            stop_on_empty_dataset=True, 
-            seed=np.random.randint(0, 1_000_000),
-        ).map(lambda x, y: (x, tf.cast(y, tf.int32)),
-            num_parallel_calls=tf.data.AUTOTUNE)
+            stop_on_empty_dataset=False,
+            seed=12345,
+        )
 
-        # independent positive/negative pools (images only), also augmented+normalized
-        pos_pool = pos_test.map(lambda x, y: x,
-                                num_parallel_calls=tf.data.AUTOTUNE)
-        neg_pool = neg_test.map(lambda x, y: x,
-                                num_parallel_calls=tf.data.AUTOTUNE)
+        val_zipped = tf.data.Dataset.zip((val_anchors,
+                                        tf.data.Dataset.zip((pos_pool_val, neg_pool_val))))
 
-        # zip once and pick p/n using the SAME y that came with the anchor
-        zipped = tf.data.Dataset.zip((test_ds, tf.data.Dataset.zip((pos_pool, neg_pool))))
-        # element: ((a, y), (p, n))
+        val_triplet_paths = val_zipped.map(pick_triplet_paths, num_parallel_calls=tf.data.AUTOTUNE)
 
-        self.test_ds = (zipped
-            .map(pick_triplet, num_parallel_calls=tf.data.AUTOTUNE)
-            .batch(Config.getInstance()['batch_size'])
+        self.test_ds = (val_triplet_paths
+            .map(load_triplet, num_parallel_calls=tf.data.AUTOTUNE)
+            .batch(Config.getInstance()['batch_size'], drop_remainder=True)
             .prefetch(tf.data.AUTOTUNE))
+
+        # (optional) tf.data options for throughput
+        opts = tf.data.Options()
+        opts.experimental_deterministic = False
+        opts.experimental_optimization.map_parallelization = True
+        opts.experimental_optimization.apply_default_optimizations = True
+        self.train_ds = self.train_ds.with_options(opts)
+        self.test_ds  = self.test_ds.with_options(opts)
+        
+        # print("loading dataset from directories...")
+        # dataset : tf.data.Dataset = keras.utils.image_dataset_from_directory(
+        #     data_dir,
+        #     labels="inferred",
+        #     label_mode="binary",
+        #     class_names=[
+        #         "neg",
+        #         "pos"
+        #     ],
+        #     color_mode="rgb",
+        #     image_size=(256, 256),
+        #     batch_size=None,
+        #     interpolation="bilinear",
+        # )
+        # print("Dataset loaded. Splitting and generating desired class balance...")
+        # pos = dataset.filter(lambda x, y: tf.squeeze(tf.equal(y, 1)))
+        # neg = dataset.filter(lambda x, y: tf.squeeze(tf.equal(y, 0)))
+        
+        # # achieve desired class split
+        # n_pos = 32542
+        # n_neg = 584
+        
+        # pos_test = pos.take(int(n_pos * train_split))
+        # pos_train = pos.skip(int(n_pos * train_split)).repeat() # train can have repeats since we are going to augment
+        # neg_test = neg.take(int(n_neg * train_split))
+        # neg_train = neg.skip(int(n_neg * train_split)).repeat()
+        
+        # # combine and preprocess
+        # # class-balanced anchors (image,label), augmented + normalized
+        # train_ds = tf.data.Dataset.sample_from_datasets(
+        #     [pos_train, neg_train],
+        #     weights=[class_split, 1.0 - class_split],
+        #     stop_on_empty_dataset=False,  # keep going forever
+        #     seed=np.random.randint(0, 1_000_000),
+        # ).map(lambda x, y: (x, tf.cast(y, tf.int32)),
+        #     num_parallel_calls=tf.data.AUTOTUNE)
+
+        # # independent positive/negative pools (images only), also augmented+normalized
+        # pos_pool = pos_train.map(lambda x, y: x,
+        #                         num_parallel_calls=tf.data.AUTOTUNE)
+        # neg_pool = neg_train.map(lambda x, y: x,
+        #                         num_parallel_calls=tf.data.AUTOTUNE)
+
+        # # zip once and pick p/n using the SAME y that came with the anchor
+        # zipped = tf.data.Dataset.zip((train_ds, tf.data.Dataset.zip((pos_pool, neg_pool))))
+        # # element: ((a, y), (p, n))
+
+        # self.train_ds = (zipped
+        #     .map(pick_triplet, num_parallel_calls=tf.data.AUTOTUNE)
+        #     .batch(Config.getInstance()['batch_size'])
+        #     .prefetch(tf.data.AUTOTUNE))
+        
+        # test_ds = tf.data.Dataset.sample_from_datasets(
+        #     [pos_test, neg_test],
+        #     weights=[class_split, 1.0 - class_split],
+        #     stop_on_empty_dataset=True, 
+        #     seed=np.random.randint(0, 1_000_000),
+        # ).map(lambda x, y: (x, tf.cast(y, tf.int32)),
+        #     num_parallel_calls=tf.data.AUTOTUNE)
+
+        # # independent positive/negative pools (images only), also augmented+normalized
+        # pos_pool = pos_test.map(lambda x, y: x,
+        #                         num_parallel_calls=tf.data.AUTOTUNE)
+        # neg_pool = neg_test.map(lambda x, y: x,
+        #                         num_parallel_calls=tf.data.AUTOTUNE)
+
+        # # zip once and pick p/n using the SAME y that came with the anchor
+        # zipped = tf.data.Dataset.zip((test_ds, tf.data.Dataset.zip((pos_pool, neg_pool))))
+        # # element: ((a, y), (p, n))
+
+        # self.test_ds = (zipped
+        #     .map(pick_triplet, num_parallel_calls=tf.data.AUTOTUNE)
+        #     .batch(Config.getInstance()['batch_size'])
+        #     .prefetch(tf.data.AUTOTUNE))
 
 
         print("Dataset initialized.")

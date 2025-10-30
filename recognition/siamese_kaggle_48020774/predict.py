@@ -17,8 +17,8 @@ if __name__ == "__main__":
     print("Compiling model...")
     modules.compile_model(model, config['learning_rate'])
 
-    print("Loading weights if available...")
-    train.load_weights(model)
+    # print("Loading weights if available...")
+    # train.load_weights(model)
 
     train.train(
         model, 

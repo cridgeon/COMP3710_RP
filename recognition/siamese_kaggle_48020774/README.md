@@ -9,6 +9,9 @@ Ensure you have [Miniconda](https://www.anaconda.com/docs/getting-started/minico
 If not otherwise specified it is assumed that the working directory that commands are 
 executed in is the `recognition/siamese_kaggle_48020774` directory.
 
+This code was written and tested on Windows Subsystem for Linux (WSL). It has not been
+tested on any other system and may not work if you try.
+
 <h2> Model and Training Breakdown </h2>
 
 <h3> Data </h3>

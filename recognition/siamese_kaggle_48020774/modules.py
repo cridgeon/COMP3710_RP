@@ -24,14 +24,9 @@ class DistanceLayer(layers.Layer):
         super().__init__(**kwargs)
 
     def call(self, anchor, positive, negative):
-        # ap_distance = ops.sum(tf.square(anchor - positive), -1)
-        # an_distance = ops.sum(tf.square(anchor - negative), -1)
-
-        ap_distance = tf.square(ops.norm(anchor - positive, axis=1))
-        an_distance = tf.square(ops.norm(anchor - negative, axis=1))
-
-        ap_distance = tf.reshape(ap_distance, (-1, 1))
-        an_distance = tf.reshape(an_distance, (-1, 1))
+        # Use euclidean distance instead of squared distance for better stability
+        ap_distance = tf.norm(anchor - positive, axis=1, keepdims=True)
+        an_distance = tf.norm(anchor - negative, axis=1, keepdims=True)
 
         return (ap_distance, an_distance)
     
@@ -45,7 +40,7 @@ class TripletLoss(layers.Layer):
     by the optimiser
     """
 
-    def __init__(self, alpha=0.5, name="triplet_loss", **kwargs):
+    def __init__(self, alpha=1.0, name="triplet_loss", **kwargs):
         super().__init__(name=name, **kwargs)
         self.triplet_loss_tracker = metrics.Mean(name="triplet_loss")
         self.alpha = alpha
@@ -94,6 +89,7 @@ class DisplayLayer(layers.Layer):
         positive_probability = tf.divide(an_distance, total_diff)
         classifications = tf.greater(positive_probability, tf.ones_like(positive_probability, dtype=tf.float32) * self.threshold)
         
+        classifications = tf.logical_not(classifications)
         labels_bool = tf.cast(labels, tf.bool)
         
         # logical XOR
@@ -101,9 +97,9 @@ class DisplayLayer(layers.Layer):
         
         self.accuracy_tracker.update_state(labels_bool, classifications)
         # Remove the incorrect loss terms - metrics should not add losses
-        # self.add_loss(1.0 - self.accuracy.result())
+        # self.add_loss(1.0 - self.accuracy_tracker.result())
         self.AUCROC_tracker.update_state(labels_bool, positive_probability)
-        # self.add_loss(1.0 - self.AUCROC.result())
+        # self.add_loss(1.0 - self.AUCROC_tracker.result())
         # self.add_loss(losses.BinaryCrossentropy()(labels, positive_probability))
         
         return classifications
@@ -179,7 +175,7 @@ def construct_classifier():
         classifier(dataset.TrainTestPreprocessor()(input_positive)),
         classifier(dataset.TrainTestPreprocessor()(input_negative))
     )
-    loss_layer = TripletLoss(alpha=0.5, name='triplet_loss')(output_distances)
+    loss_layer = TripletLoss(alpha=1.0, name='triplet_loss')(output_distances)
     output_display = DisplayLayer(name='output_display')(loss_layer, input_label)
     model = models.Model(
         inputs=[input_anchor, input_label, input_positive, input_negative],
