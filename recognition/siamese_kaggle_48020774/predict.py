@@ -23,7 +23,7 @@ if __name__ == "__main__":
     train.train(
         model, 
         data,
-        15
+        config['epochs']
     )
     
     train.validate(

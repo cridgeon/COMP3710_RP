@@ -19,23 +19,19 @@ save_callback = callbacks.ModelCheckpoint(
     verbose=1
 )
 
-# Add learning rate scheduler for better convergence
-lr_scheduler = callbacks.ReduceLROnPlateau(
-    monitor='val_triplet_loss',
-    factor=0.5,
-    patience=3,
-    min_lr=1e-6,
-    verbose=1,
-    mode='min'
+# Add learning rate scheduler that decreases LR slightly each epoch
+lr_scheduler = callbacks.LearningRateScheduler(
+    lambda epoch: config['learning_rate'] * (0.93 ** epoch),
+    verbose=1
 )
 
 # Add early stopping to prevent overfitting
 early_stopping = callbacks.EarlyStopping(
-    monitor='val_triplet_loss',
-    patience=5,
+    monitor='val_AUCROC',  # Monitor validation AUCROC instead of loss
+    patience=5,  # Reduced from 8 for earlier stopping
     restore_best_weights=True,
     verbose=1,
-    mode='min'
+    mode='max'  # Changed to max since we want higher AUCROC
 )
 
 def load_weights(model):

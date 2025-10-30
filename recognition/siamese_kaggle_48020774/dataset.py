@@ -39,15 +39,24 @@ class PreprocessLayer(layers.Layer):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.flip = layers.RandomFlip("horizontal_and_vertical")
-        # self.col = layers.RandomColorJitter([0,255], 0.2, 0.2, 0.1)
-        self.norm = NormalizationLayer()
 
     def call(self, inputs):
-        inputs = self.flip(inputs)
-        # inputs = self.col(inputs)
-        # print("Preprocessed input shape:", inputs.shape)
-        inputs = self.norm(inputs)
+        # More diverse data augmentation for better generalization
+        inputs = tf.image.random_flip_left_right(inputs)
+        inputs = tf.image.random_flip_up_down(inputs)
+        
+        # Color augmentations with more variation
+        inputs = tf.image.random_brightness(inputs, max_delta=0.15)  # Increased from 0.1
+        inputs = tf.image.random_contrast(inputs, lower=0.8, upper=1.2)  # Increased range
+        inputs = tf.image.random_saturation(inputs, lower=0.8, upper=1.2)  # Increased range
+        inputs = tf.image.random_hue(inputs, max_delta=0.15)  # Increased from 0.1
+        
+        # Random crop and resize for translation invariance
+        shape = tf.shape(inputs)
+        crop_size = tf.cast(tf.cast(shape[1:3], tf.float32) * 0.9, tf.int32)  # 90% crop
+        inputs = tf.image.random_crop(inputs, [shape[0], crop_size[0], crop_size[1], shape[3]])
+        inputs = tf.image.resize(inputs, [256, 256])
+        
         return inputs
     
 class TrainTestPreprocessor(layers.Layer):
@@ -162,8 +171,8 @@ class Dataset:
         k_neg = max(1, int(n_neg * train_split))
         
         # -------------- build labeled path datasets ----------------
-        pos_paths = tf.data.Dataset.from_tensor_slices(pos_files)
-        neg_paths = tf.data.Dataset.from_tensor_slices(neg_files)
+        pos_paths = tf.data.Dataset.from_tensor_slices(pos_files).shuffle(n_pos)
+        neg_paths = tf.data.Dataset.from_tensor_slices(neg_files).shuffle(n_neg)
 
         # attach labels (1 for pos, 0 for neg) — specify num_parallel_calls properly
         pos_labeled = pos_paths.map(lambda p: (p, tf.constant(1, tf.int32)), num_parallel_calls=tf.data.AUTOTUNE)

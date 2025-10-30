@@ -98,7 +98,7 @@ class DisplayLayer(layers.Layer):
         self.accuracy_tracker.update_state(labels_bool, classifications)
         # Remove the incorrect loss terms - metrics should not add losses
         # self.add_loss(1.0 - self.accuracy_tracker.result())
-        self.AUCROC_tracker.update_state(labels_bool, positive_probability)
+        self.AUCROC_tracker.update_state(labels_bool, classifications)
         # self.add_loss(1.0 - self.AUCROC_tracker.result())
         # self.add_loss(losses.BinaryCrossentropy()(labels, positive_probability))
         
@@ -128,10 +128,10 @@ class EncoderHead(layers.Layer):
         super().__init__(**kwargs)
         self.flat = layers.Flatten()
         self.dense1 = layers.Dense(512, activation='relu')
-        self.dropout1 = layers.Dropout(0.5)
-        self.dense2 = layers.Dense(512, activation='relu')
-        self.dropout2 = layers.Dropout(0.5)
-        self.dense3 = layers.Dense(256, activation='relu')
+        self.dropout1 = layers.Dropout(0.7)  # Increased from 0.5
+        self.dense2 = layers.Dense(512, activation='relu')  # Reduced from 512
+        self.dropout2 = layers.Dropout(0.7)  # Increased from 0.5
+        self.dense3 = layers.Dense(256, activation='relu')  # Reduced from 256
 
     def call(self, resnet_output):
         # haha python is stupid
@@ -188,7 +188,10 @@ def construct_classifier():
 
 def compile_model(model : Model, learning_rate):
     model.compile(
-        optimizer=optimizers.Adam(learning_rate=learning_rate),
+        optimizer=optimizers.Adam(
+            learning_rate=learning_rate,
+            weight_decay=1e-4  # Add L2 regularization
+        ),
     )
 
 if __name__ == "__main__":
