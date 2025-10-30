@@ -1,9 +1,9 @@
 {
     "data_dir": "data",
-    "train_split": 0.25,
+    "train_split": 0.3,
     "class_split": 0.3,
     "batch_size": 32,
-    "epochs": 20,
-    "learning_rate": 0.0001,
-    "model_save_path": "siamese_model.weights.h5"
+    "epochs": 35,
+    "learning_rate": 0.00005,
+    "model_save_path": "trained_model.weights.h5"
 }

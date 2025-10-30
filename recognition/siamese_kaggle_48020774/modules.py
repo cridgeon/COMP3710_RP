@@ -81,6 +81,8 @@ class DisplayLayer(layers.Layer):
         super().__init__(**kwargs)
         self.accuracy_tracker = metrics.BinaryAccuracy(name="accuracy")
         self.AUCROC_tracker = metrics.AUC(name="AUCROC")
+        self.cross_entropy = losses.BinaryCrossentropy()
+        self.cross_entropy_tracker = metrics.Mean(name="cross_entropy")
         self.threshold = threshold
 
     def call(self, distances, labels, training=None):
@@ -96,11 +98,12 @@ class DisplayLayer(layers.Layer):
         classifications = tf.logical_and(tf.logical_or(classifications, labels_bool), tf.logical_not(tf.logical_and(classifications, labels_bool)))
         
         self.accuracy_tracker.update_state(labels_bool, classifications)
-        # Remove the incorrect loss terms - metrics should not add losses
-        # self.add_loss(1.0 - self.accuracy_tracker.result())
         self.AUCROC_tracker.update_state(labels_bool, classifications)
-        # self.add_loss(1.0 - self.AUCROC_tracker.result())
-        # self.add_loss(losses.BinaryCrossentropy()(labels, positive_probability))
+        
+        ce = self.cross_entropy(labels, positive_probability)
+        self.add_loss(ce)
+        self.cross_entropy_tracker.update_state(ce)
+
         
         return classifications
     
@@ -178,7 +181,7 @@ def construct_classifier():
         classifier(dataset.TrainTestPreprocessor()(input_positive)),
         classifier(dataset.TrainTestPreprocessor()(input_negative))
     )
-    loss_layer = TripletLoss(alpha=1.0, name='triplet_loss')(output_distances)
+    loss_layer = TripletLoss(alpha=0.2, name='triplet_loss')(output_distances)
     output_display = DisplayLayer(name='output_display')(loss_layer, input_label)
     model = models.Model(
         inputs=[input_anchor, input_label, input_positive, input_negative],

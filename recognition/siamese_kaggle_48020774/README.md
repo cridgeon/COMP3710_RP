@@ -157,95 +157,45 @@ computation of both a training and testing dataset.
 In order to run the model, include the relevant files in your custom script and
 follow a similar process to the one shown in `predict.py`. Alternatively, run
 `predict.py` for a training process that should provide similar results to those
-mentioned in this README.
+mentioned in this README. Do enjoy training forever.
 
 <h2> Results </h2>
 
 <h3> Metric Plots </h3>
 
-![Metric Plots](./resources/final_plots.png)
+![Metric Plots](./resources/training_plots.png)
 
 The above plots show the history of Triplet loss, acurracy and AUCROC score over
-15 epochs of training after running `predict.py`. Traing metrics are not recorded,
-please read the [Footnotes](#notes) section. Plots show trends that align with desireable
-outcomes, however, are notably "unstable". This phenomena is likely due to the 
+15 epochs of training after running `predict.py`. Plots show trends that align with desireable
+outcomes, however, validation metrics are notably "unstable". This phenomena is likely due to the 
 significant reduction in size of the validation set when compared to the training set,
 as it is not unlikely for an epoch of training to not include data that closely
 resembles the data used for validating that epoch. In spite of this, average trends
 indicate rising classifier ability, demonstrating effective training.
 
+You have likely noted the significant number of training epochs. Due to the heavy handed data
+augmentation that takes place in the preprocessing layer, the model was able to train for
+this extended period without overfitting, and maintaining a linear trend in accuracy and
+AUCROC score.
+
 <h3> Confusion Matrix </h3>
 
-![Confision Matrix](./resources/confusion.png)
+![Confision Matrix](./resources/confusion_matrix.png)
 
 The above matrix shows the distrubution of classifications on a validation set after
-training. Since our classifier is designed to detect cancerous samples, the most
+training. Since our classifier is designed to detect cancerous samples. The most
 important statistic shown is the ratio of true to false positives, as falsely 
 identifying a malignant sample as benign could have life altering effect on a patient.
-The figure shows that the percent of true positives correctly identified is __%. This is 
-short of the desired 80% classification threshold, and so, further improvements to the 
-model, training or preprocessing should be undertaken, if this model were to be used 
-in practice.
+It can be calulated from the figure thatt the percentage of correctly identified positive
+samples is 91.22%. This significantly exceeds the desired 80% classification threshold, 
+and so, would almost certainly be able to provide helpful insights into real world scenarios.
 
 <h3> ROC Curve </h3>
 
-![ROC Curve](./resources/ROC.png)
+![ROC Curve](./resources/roc.png)
 
 The above plot shows the ROC curve for the trained model on a validation set, the AUCROC
-score being __. This demonstrates that the model well trained for medical use, as one
+score being 0.827. This demonstrates that the model well trained for medical use, as one
 report states:
 >AUC values above 0.80 are generally considered clinically useful [[2]](https://pubmed.ncbi.nlm.nih.gov/38024184/)
-
-<h2 id="notes"> Footnotes </h2>
-
-In relation to the lack of Training metric plots. For some eldritch reason entirely
-incomprehensible to the human mind, using the tf.data api instead of loading the whole
-dataset into RAM before training, not only causes the training metrics to not be tracked
-but also forces the training to be run on the CPU, even when GPU support is avaliable
-and used for the other case. If you would like to resolve this issue yourself, I invite
-you go ahead, I however, refuse to spend more hours fighting with environment issues.
-
----
-
-And now for something completely different, but with the same energy.
-
-Python can go fuck itself. A dynamically typed, interpreted pile of shit. The design
-descisions that went into creating this language are foolish at best. Placing the burden 
-of repeatedly and manually type checking because the language will just cast your 
-variables to whatever the hell it wants without asking is one of the most diabolical
-schemes ever created. Better yet, why tell the programmer that what they are about to 
-run for hours will fail at the last moment before they go through the effort? Let's make 
-them need to rerun their files for multiple hours dealing with 10 step detatched error 
-messages that barely relate to what caused them. The only upside to this "professional" 
-language is the fact that there is barely any boilerplate. Just learn it for fucks sake 
-its not that hard.
-
-Any use of Python beyond 200 line single file utility scripts is a grave mistake. You
-compromise speed, memory efficiency, input safety, robustness, crash telemetry and just 
-about everything else. Any fool who thinks its reasonable to write real programs in 
-Python is just that. These "developers" are kidding themselves and making excuses not to
-learn how to deal with features in other programs that are actually useful, like
-pointer/reference use and low level memory management.
-
-I despise the reality that Python is the language of choice for teaching new programmers.
-It promotes a lack of critical thinking and analysis that is required of programmers who
-create systems that actually make a difference. Beyond baby's firt "Hello World!" and
-calculator, the "convinience" that Python provides is a plague on your systems. If you 
-can't hack it with a language like C++, or don't get satifaction out of making your 
-programs degrees faster by investigating and experimenting with new data structures and
-algorithms, I am fearful for the state of the programs you create.
-
-Python is a language that lets you convert files, plot data, rebroadcast signals, and 
-whip up **concept** GUIs with a single LLM prompt. Anything that cant be created by 
-asking an AI once for it, should never be implemented in python. This is not an 
-appropriate language for humans to spend their time writing in. Upskill yourself or pick 
-a different career. Most certainly don't make it out to newcomers that this language is
-one that they should feel secure using.
-
-In the end python is the ugly child that was born out of decades of abstraction, and it
-is breeding a new generation of programmers who have abilities not nearly comparable to
-those who have come before. It is a sad reality that the skill of many of the great
-programmers who pioneered things like banking systems, OSs, kernels, rocket systems and 
-so forth is lost, and seems to be a rarer and rarer asset. Those people deserve our 
-utmost respect. All who take this career seriously should strive to acheive their 
-ability.
+Further promoting the real world deployability of this model.

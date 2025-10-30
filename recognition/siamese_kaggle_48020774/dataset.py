@@ -48,16 +48,16 @@ class PreprocessLayer(layers.Layer):
         inputs = self.jit(inputs)
         
         # Color augmentations with more variation
-        # inputs = tf.image.random_brightness(inputs, max_delta=0.15)  # Increased from 0.1
-        # inputs = tf.image.random_contrast(inputs, lower=0.8, upper=1.2)  # Increased range
-        # inputs = tf.image.random_saturation(inputs, lower=0.8, upper=1.2)  # Increased range
-        # inputs = tf.image.random_hue(inputs, max_delta=0.15)  # Increased from 0.1
+        inputs = tf.image.random_brightness(inputs, max_delta=0.15)  # Increased from 0.1
+        inputs = tf.image.random_contrast(inputs, lower=0.8, upper=1.2)  # Increased range
+        inputs = tf.image.random_saturation(inputs, lower=0.8, upper=1.2)  # Increased range
+        inputs = tf.image.random_hue(inputs, max_delta=0.15)  # Increased from 0.1
         
-        # Random crop and resize for translation invariance
-        # shape = tf.shape(inputs)
-        # crop_size = tf.cast(tf.cast(shape[1:3], tf.float32) * 0.9, tf.int32)  # 90% crop
-        # inputs = tf.image.random_crop(inputs, [shape[0], crop_size[0], crop_size[1], shape[3]])
-        # inputs = tf.image.resize(inputs, [256, 256])
+        # # Random crop and resize for translation invariance
+        shape = tf.shape(inputs)
+        crop_size = tf.cast(tf.cast(shape[1:3], tf.float32) * 0.9, tf.int32)  # 90% crop
+        inputs = tf.image.random_crop(inputs, [shape[0], crop_size[0], crop_size[1], shape[3]])
+        inputs = tf.image.resize(inputs, [256, 256])
         
         return inputs
     
@@ -75,8 +75,8 @@ class TrainTestPreprocessor(layers.Layer):
         self.norm = NormalizationLayer()
 
     def call(self, inputs, training=None):
-        if training:
-            inputs = self.preprocess(inputs)
+        # if training:
+        #     inputs = self.preprocess(inputs)
         inputs = self.norm(inputs)
         return inputs
 
@@ -173,8 +173,8 @@ class Dataset:
         k_neg = max(1, int(n_neg * train_split))
         
         # -------------- build labeled path datasets ----------------
-        pos_paths = tf.data.Dataset.from_tensor_slices(pos_files).shuffle(n_pos)
-        neg_paths = tf.data.Dataset.from_tensor_slices(neg_files).shuffle(n_neg)
+        pos_paths = tf.data.Dataset.from_tensor_slices(pos_files).shuffle(n_pos, seed=None)
+        neg_paths = tf.data.Dataset.from_tensor_slices(neg_files).shuffle(n_neg, seed=None)
 
         # attach labels (1 for pos, 0 for neg) — specify num_parallel_calls properly
         pos_labeled = pos_paths.map(lambda p: (p, tf.constant(1, tf.int32)), num_parallel_calls=tf.data.AUTOTUNE)
@@ -192,21 +192,21 @@ class Dataset:
         pos_pool_train = pos_train_stream.map(lambda p, y: p, num_parallel_calls=tf.data.AUTOTUNE)
         neg_pool_train = neg_train_stream.map(lambda p, y: p, num_parallel_calls=tf.data.AUTOTUNE)
 
-        pos_pool_val = pos_val_anchors.map(lambda p, y: p, num_parallel_calls=tf.data.AUTOTUNE).repeat()
-        neg_pool_val = neg_val_anchors.map(lambda p, y: p, num_parallel_calls=tf.data.AUTOTUNE).repeat()
+        pos_pool_val = pos_val_anchors.map(lambda p, y: p, num_parallel_calls=tf.data.AUTOTUNE)
+        neg_pool_val = neg_val_anchors.map(lambda p, y: p, num_parallel_calls=tf.data.AUTOTUNE)
 
         # -------------- TRAIN dataset (infinite) ----------------
         train_anchors = tf.data.Dataset.sample_from_datasets(
             [pos_train_stream, neg_train_stream],
             weights=[class_split, 1.0 - class_split],
             stop_on_empty_dataset=False,
-            seed=42,
+            seed=None,
         )
 
         train_zipped = tf.data.Dataset.zip((train_anchors,
                                             tf.data.Dataset.zip((pos_pool_train, neg_pool_train))))
 
-        train_triplet_paths = train_zipped.map(pick_triplet_paths, num_parallel_calls=tf.data.AUTOTUNE)
+        train_triplet_paths = train_zipped.map(pick_triplet_paths, num_parallel_calls=tf.data.AUTOTUNE).cache()
 
         self.train_ds = (train_triplet_paths
             .map(load_triplet, num_parallel_calls=tf.data.AUTOTUNE)
@@ -217,19 +217,19 @@ class Dataset:
         val_anchors = tf.data.Dataset.sample_from_datasets(
             [pos_val_anchors, neg_val_anchors],
             weights=[class_split, 1.0 - class_split],
-            stop_on_empty_dataset=False,
-            seed=12345,
+            stop_on_empty_dataset=True,
+            seed=None
         )
 
         val_zipped = tf.data.Dataset.zip((val_anchors,
                                         tf.data.Dataset.zip((pos_pool_val, neg_pool_val))))
 
-        val_triplet_paths = val_zipped.map(pick_triplet_paths, num_parallel_calls=tf.data.AUTOTUNE)
+        val_triplet_paths = val_zipped.map(pick_triplet_paths, num_parallel_calls=tf.data.AUTOTUNE).cache()
 
         self.test_ds = (val_triplet_paths
             .map(load_triplet, num_parallel_calls=tf.data.AUTOTUNE)
-            .batch(Config.getInstance()['batch_size'], drop_remainder=True)
-            .prefetch(tf.data.AUTOTUNE))
+            .shuffle(1000, reshuffle_each_iteration=True)
+            .batch(Config.getInstance()['batch_size'], drop_remainder=False))
 
         # (optional) tf.data options for throughput
         opts = tf.data.Options()
@@ -254,7 +254,7 @@ class Dataset:
         #     interpolation="bilinear",
         # )
         # print("Dataset loaded. Splitting and generating desired class balance...")
-        # pos = dataset.filter(lambda x, y: tf.squeeze(tf.equal(y, 1)))
+        # pos = dataset.filter(lambda x, y: `tf.squeeze(tf.equal(y, 1))`)
         # neg = dataset.filter(lambda x, y: tf.squeeze(tf.equal(y, 0)))
         
         # # achieve desired class split
@@ -334,7 +334,7 @@ class Dataset:
 
 import matplotlib.pyplot as plt
 
-def plot_random_pn_samples(Pos, Neg, n):
+def plot_random_pn_samples(dataset : tf.data.Dataset, n, save_path=None):
     """
     Plots a random sample of test images with their labels.
 
@@ -347,28 +347,40 @@ def plot_random_pn_samples(Pos, Neg, n):
     num_samples : int
         Number of samples to plot.
     """
-    pos_idxs = np.random.choice(Pos.shape[0], n, replace=False)
-    neg_idxs = np.random.choice(Neg.shape[0], n, replace=False)
-
-    pos_images = Pos.numpy()[pos_idxs]
-    neg_images = Neg.numpy()[neg_idxs]
-
+    dataset = dataset.unbatch()
+    pos = (dataset.filter(lambda x, y: tf.squeeze(tf.equal(y, 1)))
+           .map(lambda x, y: x)
+           .map(lambda a,y,p,n: a)
+           )
+    neg = (dataset.filter(lambda x, y: tf.squeeze(tf.equal(y, 0)))
+           .map(lambda x, y: x)
+           .map(lambda a,y,p,n: a)
+           )
+    pos_it = pos.as_numpy_iterator()
+    neg_it = neg.as_numpy_iterator()
     plt.figure(figsize=(16, 2))
+    lay = TrainTestPreprocessor()
     for i in range(n):
         plt.subplot(2, n, i + 1)
-        img = pos_images[i]
+        img = pos_it.next()
+        img = lay(img[None, ...], training=False)
+        img = tf.reshape(img, img.shape[1:])  # remove batch dim
         img = (tf.tanh(img) + 1) / 2
         plt.imshow(img)
         plt.axis('off')
         plt.title("Malignant")
 
         plt.subplot(2, n, n + i + 1)
-        img = neg_images[i]
+        img = neg_it.next()
+        img = lay(img[None, ...], training=False)
+        img = tf.reshape(img, img.shape[1:])  # remove batch dim
         img = (tf.tanh(img) + 1) / 2
         plt.imshow(img)
         plt.axis('off')
         plt.title("Benign")
     plt.tight_layout()
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
     plt.show()
 
 
@@ -410,7 +422,6 @@ if __name__ == "__main__":
 
     dataset = Dataset(
         config["data_dir"],
-        config["max_images_in_ds"],
         config["class_split"],
         config["train_split"] 
     )
@@ -419,6 +430,8 @@ if __name__ == "__main__":
     test_ds = dataset.GenerateTestSet()
     
     print("Dataset test complete")
+    
+    plot_random_pn_samples(test_ds, 10, "test.png")
 
     # X, Y, P, N = dataset.GenerateTestSet(50)
 

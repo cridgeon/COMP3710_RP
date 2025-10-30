@@ -25,15 +25,6 @@ lr_scheduler = callbacks.LearningRateScheduler(
     verbose=1
 )
 
-# Add early stopping to prevent overfitting
-early_stopping = callbacks.EarlyStopping(
-    monitor='val_AUCROC',  # Monitor validation AUCROC instead of loss
-    patience=5,  # Reduced from 8 for earlier stopping
-    restore_best_weights=True,
-    verbose=1,
-    mode='max'  # Changed to max since we want higher AUCROC
-)
-
 def load_weights(model):
     if not os.path.exists(__save_path):
         print(f"No weights found at {__save_path}")
@@ -53,7 +44,8 @@ def train(model : Model, dataset : dataset.Dataset, epochs : int):
         epochs=epochs,
         steps_per_epoch=100,  # Increased from 60 for better learning
         validation_data=test_ds,
-        callbacks=[save_callback, lr_scheduler, early_stopping]
+        validation_steps=100,  # Increased from 10 for better validation
+        callbacks=[save_callback, lr_scheduler]
     )
     print("Recording history...")
     
@@ -126,8 +118,8 @@ def validate(model: Model, data : dataset.Dataset):
     # Collect predictions and labels from the validation set
     predictions = []
     labels = []
-    
-    for batch_idx, (inputs, targets) in enumerate(test_ds.take(50)):  # Take 50 batches for validation
+
+    for batch_idx, (inputs, targets) in enumerate(test_ds.take(1000)):  # Take 1000 batches for validation
         # inputs is ((anchor, label, positive, negative), label)
         batch_predictions = model.predict_on_batch(inputs)
         batch_labels = targets.numpy()
